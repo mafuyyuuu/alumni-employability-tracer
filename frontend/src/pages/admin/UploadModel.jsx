@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout'
-import { MdCloudUpload, MdInsertDriveFile, MdCheckCircle, MdInfo } from 'react-icons/md'
+import { MdCloudUpload, MdInsertDriveFile, MdCheckCircle, MdInfo, MdSync } from 'react-icons/md'
 import api from '../../services/api'
 
 const tabs = ['Upload New Model', 'Add Data to Existing Model', 'View Dataset']
@@ -19,39 +19,81 @@ export default function UploadModel() {
   const [selectedFile, setSelectedFile] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [uploadDone, setUploadDone] = useState(false)
+  const [uploadPolicy, setUploadPolicy] = useState('')
   const [recentUploads, setRecentUploads] = useState([])
+  const [modelStatus, setModelStatus] = useState(null)
+  const [statusLoading, setStatusLoading] = useState(true)
+  const [statusError, setStatusError] = useState('')
+  const [retraining, setRetraining] = useState(false)
+  const [applyToTraining, setApplyToTraining] = useState(true)
+  const [retrainAfterImport, setRetrainAfterImport] = useState(true)
+  const [importSummary, setImportSummary] = useState(null)
   const fileRef = useRef(null)
+
+  async function loadModelStatus() {
+    setStatusLoading(true)
+    try {
+      const r = await api.get('/admin/models/status')
+      setModelStatus(r.data.model || null)
+      setStatusError('')
+    } catch (err) {
+      setStatusError(err.response?.data?.error || 'Unable to load model status')
+    } finally {
+      setStatusLoading(false)
+    }
+  }
 
   useEffect(() => {
     api.get('/admin/uploads').then(r => setRecentUploads(r.data.uploads || [])).catch(() => {})
+    loadModelStatus()
   }, [])
+
+  async function retrainModel() {
+    setRetraining(true)
+    setStatusError('')
+    try {
+      await api.post('/admin/models/retrain', {})
+      await loadModelStatus()
+    } catch (err) {
+      setStatusError(err.response?.data?.error || 'Model retraining failed')
+    } finally {
+      setRetraining(false)
+    }
+  }
 
   function handleDrop(e) {
     e.preventDefault()
     setDragOver(false)
     const file = e.dataTransfer.files[0]
-    if (file) { setSelectedFile(file); setUploadDone(false) }
+    if (file) { setSelectedFile(file); setUploadDone(false); setImportSummary(null) }
   }
 
   function handleFileChange(e) {
     const file = e.target.files[0]
-    if (file) { setSelectedFile(file); setUploadDone(false) }
+    if (file) { setSelectedFile(file); setUploadDone(false); setImportSummary(null) }
   }
 
   async function uploadFile() {
     if (!selectedFile) return
     setUploading(true)
     try {
+      const isCsv = selectedFile.name.toLowerCase().endsWith('.csv')
+      const shouldApplyTraining = isCsv && applyToTraining
       const fd = new FormData()
       fd.append('file', selectedFile)
       fd.append('name', modelName || selectedFile.name)
+      fd.append('apply_to_training', String(shouldApplyTraining))
+      fd.append('retrain_after_import', String(shouldApplyTraining && retrainAfterImport))
       const r = await api.post('/admin/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       if (r.data.upload) setRecentUploads(prev => [r.data.upload, ...prev])
+      setUploadPolicy(r.data.training_policy || '')
+      setImportSummary(r.data.import || null)
       setUploadDone(true)
       setSelectedFile(null)
       setModelName('')
-    } catch {
-      alert('Upload failed. Please try again.')
+      await loadModelStatus()
+    } catch (err) {
+      alert(err.response?.data?.error || 'Upload failed. Please try again.')
     } finally {
       setUploading(false)
     }
@@ -146,6 +188,29 @@ export default function UploadModel() {
               <input ref={fileRef} type="file" accept=".csv,.xlsx,.pkl" className="hidden" onChange={handleFileChange} />
             </div>
 
+            {selectedFile?.name?.toLowerCase().endsWith('.csv') && (
+              <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50 p-3">
+                <label className="flex items-center gap-2 text-xs text-indigo-900 font-medium">
+                  <input
+                    type="checkbox"
+                    checked={applyToTraining}
+                    onChange={e => setApplyToTraining(e.target.checked)}
+                  />
+                  Use this CSV as model training data
+                </label>
+                {applyToTraining && (
+                  <label className="flex items-center gap-2 text-xs text-indigo-700 mt-2">
+                    <input
+                      type="checkbox"
+                      checked={retrainAfterImport}
+                      onChange={e => setRetrainAfterImport(e.target.checked)}
+                    />
+                    Retrain RF/LR immediately after import
+                  </label>
+                )}
+              </div>
+            )}
+
             {/* Actions */}
             <div className="flex justify-end gap-3 mt-5 pt-5 border-t border-gray-100">
               <button onClick={() => { setSelectedFile(null); setModelName(''); setUploadDone(false) }}
@@ -160,10 +225,71 @@ export default function UploadModel() {
                 ) : 'Upload Model'}
               </button>
             </div>
+            {uploadPolicy && (
+              <p className="text-xs text-gray-400 mt-3 text-right">
+                Training policy: <span className="font-semibold text-gray-600">{uploadPolicy}</span>
+              </p>
+            )}
+            {importSummary && (
+              <div className="mt-2 text-xs text-gray-500 text-right">
+                Imported: <span className="font-semibold text-gray-700">{importSummary.rows_imported ?? 0}</span> / {importSummary.rows_seen ?? 0}
+                {' • '}Skipped: <span className="font-semibold text-gray-700">{importSummary.rows_skipped ?? 0}</span>
+              </div>
+            )}
           </div>
 
           {/* Right Panel */}
           <div className="w-full md:w-60 md:flex-shrink-0 space-y-4">
+            {/* Model status */}
+            <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-bold text-gray-900">Model Status</h3>
+                {!statusLoading && (
+                  <span
+                    className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                    style={modelStatus?.loaded
+                      ? { background: '#f0faf5', color: '#2d6a4f' }
+                      : { background: '#fff7ed', color: '#ea580c' }}
+                  >
+                    {modelStatus?.loaded ? 'Loaded' : 'Offline'}
+                  </span>
+                )}
+              </div>
+              {statusLoading ? (
+                <p className="text-xs text-gray-400">Loading model info…</p>
+              ) : (
+                <div className="space-y-1.5 text-xs text-gray-500">
+                  <p>Features: <span className="font-semibold text-gray-700">{modelStatus?.feature_count ?? 0}</span></p>
+                  <p>Training rows: <span className="font-semibold text-gray-700">{modelStatus?.row_count ?? 0}</span></p>
+                  <p>Source: <span className="font-semibold text-gray-700">{modelStatus?.training_source || '—'}</span></p>
+                  <p className="break-all">Trained: <span className="font-semibold text-gray-700">{modelStatus?.trained_at_utc || '—'}</span></p>
+                  {modelStatus?.models && (
+                    <div className="pt-2 mt-2 border-t border-gray-100 space-y-1">
+                      <p>
+                        RF: <span className="font-semibold text-gray-700">{modelStatus.models.rf?.loaded ? 'Loaded' : 'Offline'}</span>
+                      </p>
+                      <p>
+                        LR: <span className="font-semibold text-gray-700">{modelStatus.models.lr?.loaded ? 'Loaded' : 'Offline'}</span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+              {statusError && <p className="text-xs text-red-500 mt-2">{statusError}</p>}
+              <button
+                onClick={retrainModel}
+                disabled={retraining}
+                className="w-full mt-3 px-3 py-2 rounded-xl text-xs font-bold text-white transition-all hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2"
+                style={{ background: '#2d6a4f' }}
+              >
+                {retraining ? (
+                  <><svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="white" strokeWidth="4" /><path className="opacity-75" fill="white" d="M4 12a8 8 0 018-8v8z" /></svg> Retraining…</>
+                ) : (
+                  <><MdSync className="text-sm" /> Retrain from Live DB</>
+                )}
+              </button>
+            </div>
+
             {/* Guidelines */}
             <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
               <div className="flex items-center gap-2 mb-4">

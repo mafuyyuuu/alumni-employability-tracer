@@ -176,6 +176,13 @@ def seed():
             INSERT INTO voter_config (field_key, field_name, enabled, weight) VALUES (?,?,?,?)
         """, voter_fields)
 
+    # ── Prediction settings ─────────────────────────────────────────────
+    c.execute("SELECT COUNT(*) FROM prediction_settings")
+    if c.fetchone()[0] == 0:
+        c.execute("""
+            INSERT INTO prediction_settings (id, use_voter_weights) VALUES (1, 0)
+        """)
+
     # ── Reports ───────────────────────────────────────────────────────
     reps = [
         ('Employment Forecast Report 2024', 'PDF', '2019–2024', 'ARIMA (2,1,2)', 'Ready'),
