@@ -11,12 +11,14 @@ export default function PredictReport() {
   const [model, setModel] = useState('Linear Regression')
   const [reports, setReports] = useState([])
   const [metrics, setMetrics] = useState({ mae: '—', rmse: '—', mape: '—', r2: '—' })
+  const [metricsByModel, setMetricsByModel] = useState({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     api.get('/admin/predict-report').then(r => {
       setReports(r.data.reports || [])
       if (r.data.metrics) setMetrics(r.data.metrics)
+      if (r.data.metrics_by_model) setMetricsByModel(r.data.metrics_by_model)
     }).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
@@ -27,6 +29,7 @@ export default function PredictReport() {
       const r = await api.post('/admin/predict-report/generate', { type: reportType, year_range: yearRange, model })
       if (r.data.report) setReports(prev => [r.data.report, ...prev])
       if (r.data.metrics) setMetrics(r.data.metrics)
+      if (r.data.metrics_by_model) setMetricsByModel(r.data.metrics_by_model)
       setGenerated(true)
       setTimeout(() => setGenerated(false), 3000)
     } catch {
@@ -106,9 +109,11 @@ export default function PredictReport() {
                   <select value={model} onChange={e => setModel(e.target.value)}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 bg-gray-50 focus:outline-none">
                     <option>Linear Regression</option>
+                    <option>Random Forest</option>
                     <option>ARIMA (2,1,2)</option>
                     <option>ARIMA (1,1,1)</option>
                     <option>Auto ARIMA</option>
+                    <option>All Models</option>
                   </select>
                 </div>
               </div>
@@ -137,6 +142,15 @@ export default function PredictReport() {
                   </div>
                 ))}
               </div>
+              {Object.keys(metricsByModel).length > 0 && (
+                <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
+                  {Object.entries(metricsByModel).map(([name, m]) => (
+                    <p key={name} className="text-xs text-gray-500">
+                      <span className="font-semibold text-gray-700">{name}</span>: MAE {m.mae}, RMSE {m.rmse}, MAPE {m.mape}, R² {m.r2}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

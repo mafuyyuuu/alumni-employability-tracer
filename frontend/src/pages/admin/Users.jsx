@@ -14,10 +14,13 @@ export default function Users() {
   const [predictionByUser, setPredictionByUser] = useState({})
   const [predictingId, setPredictingId] = useState(null)
   const [predictError, setPredictError] = useState('')
+  const [selectedModel, setSelectedModel] = useState('rf')
 
   function modelLabel(code) {
     const key = String(code || '').toLowerCase()
     if (key === 'rf') return 'RF'
+    if (key === 'lr') return 'Linear Regression'
+    if (key === 'arima') return 'ARIMA'
     return key ? key.toUpperCase() : 'RF'
   }
 
@@ -52,7 +55,7 @@ export default function Users() {
   function predictForUser(userId) {
     setPredictError('')
     setPredictingId(userId)
-    api.post('/admin/predict-employability', { user_id: userId, model: 'rf' }).then(r => {
+    api.post('/admin/predict-employability', { user_id: userId, model: selectedModel }).then(r => {
       if (r.data?.prediction) {
         setPredictionByUser(prev => ({ ...prev, [userId]: r.data.prediction }))
       }
@@ -108,6 +111,17 @@ export default function Users() {
                 {f}
               </button>
             ))}
+          </div>
+          <div className="mt-2 sm:w-52">
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 bg-white focus:outline-none"
+            >
+              <option value="rf">Random Forest</option>
+              <option value="lr">Linear Regression</option>
+              <option value="arima">ARIMA</option>
+            </select>
           </div>
         </div>
         {predictError && (

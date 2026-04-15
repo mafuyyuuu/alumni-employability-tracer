@@ -39,13 +39,14 @@ export default function AdminDashboard() {
   const navigate = useNavigate()
   const [metrics, setMetrics] = useState({ total_alumni: '…', employment_rate: '…', employment_rate_change: 0, graduate_success: '…', margin_of_error: '…' })
   const [employmentData, setEmploymentData] = useState([])
+  const [model, setModel] = useState('Linear Regression')
 
   useEffect(() => {
-    api.get('/admin/dashboard').then(r => {
+    api.get('/admin/dashboard', { params: { model } }).then(r => {
       setMetrics(r.data.metrics)
       setEmploymentData(r.data.employment_data || [])
     }).catch(() => {})
-  }, [])
+  }, [model])
 
   const metricCards = [
     { label: 'Total Alumni',     value: metrics.total_alumni,      sub: '+124 this year',            icon: MdPeople,       color: '#6366f1', bg: '#eef2ff' },
@@ -96,9 +97,22 @@ export default function AdminDashboard() {
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h2 className="text-sm font-bold text-gray-900">Employment Rate Forecast</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Historical trend with 1-year Linear Regression projection</p>
+                <p className="text-xs text-gray-400 mt-0.5">Historical trend with 1-year model projection</p>
               </div>
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: '#f0faf5', color: '#2d6a4f' }}>Linear Regression Model</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">Model</span>
+                <select
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700 focus:outline-none"
+                >
+                  <option>Linear Regression</option>
+                  <option>Random Forest</option>
+                  <option>Auto ARIMA (AIC search)</option>
+                  <option>ARIMA (p=2, d=1, q=2)</option>
+                  <option>ARIMA (p=1, d=1, q=1)</option>
+                </select>
+              </div>
             </div>
             <ResponsiveContainer width="100%" height={240}>
               <AreaChart data={employmentData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
