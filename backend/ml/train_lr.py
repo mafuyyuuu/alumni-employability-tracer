@@ -66,20 +66,24 @@ def train_logistic_regression(database_path: str | None = None) -> dict:
 
 def run_lr_forecast(rates, horizon=3):
     """Forecast future employment rates using sklearn LinearRegression."""
+    normalized_rates = []
     try:
         from sklearn.linear_model import LinearRegression
         from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-        if len(rates) < 2:
-            last = rates[-1] if rates else 70.0
+        normalized_rates = [] if rates is None else [float(rate) for rate in rates]
+        horizon = max(int(horizon or 1), 1)
+
+        if len(normalized_rates) < 2:
+            last = normalized_rates[-1] if normalized_rates else 70.0
             return {
                 'forecast_values': [round(last + 3.0 * (i + 1), 1) for i in range(horizon)],
                 'metrics': {'mae': 1.24, 'rmse': 1.58, 'mape': 2.1, 'r2': 0.97},
                 'model_used': 'Linear Regression',
             }
 
-        X = np.array(range(len(rates))).reshape(-1, 1)
-        y = np.array(rates)
+        X = np.array(range(len(normalized_rates))).reshape(-1, 1)
+        y = np.array(normalized_rates, dtype=float)
 
         model = LinearRegression()
         model.fit(X, y)
@@ -92,7 +96,7 @@ def run_lr_forecast(rates, horizon=3):
             mape = float(np.nanmean(mape_arr))
         r2 = float(r2_score(y, y_pred))
 
-        future_X = np.array(range(len(rates), len(rates) + horizon)).reshape(-1, 1)
+        future_X = np.array(range(len(normalized_rates), len(normalized_rates) + horizon)).reshape(-1, 1)
         forecast_values = [round(float(v), 1) for v in model.predict(future_X)]
 
         return {
@@ -107,14 +111,15 @@ def run_lr_forecast(rates, horizon=3):
         }
 
     except (ImportError, ValueError, TypeError):
-        if len(rates) >= 2:
-            trend = np.polyfit(range(len(rates)), rates, 1)
+        horizon = max(int(horizon or 1), 1)
+        if len(normalized_rates) >= 2:
+            trend = np.polyfit(range(len(normalized_rates)), normalized_rates, 1)
             forecast_values = [
-                round(float(np.polyval(trend, len(rates) + i)), 1)
+                round(float(np.polyval(trend, len(normalized_rates) + i)), 1)
                 for i in range(horizon)
             ]
         else:
-            last = rates[-1] if rates else 70.0
+            last = normalized_rates[-1] if normalized_rates else 70.0
             forecast_values = [round(last + 3.0 * (i + 1), 1) for i in range(horizon)]
 
         return {
