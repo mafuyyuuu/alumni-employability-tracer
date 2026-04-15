@@ -9,6 +9,9 @@ import api from '../../services/api'
 
 const years = ['1 Year (2024)', '2 Years (2024–2025)', '3 Years (2024–2026)']
 
+const formatMape = (value) =>
+  typeof value === 'number' ? `${value}%` : (value || 'N/A')
+
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
   const isForecast = payload[0]?.payload?.forecast
@@ -25,7 +28,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 
 export default function Forecasting() {
   const [horizon, setHorizon] = useState(2)
-  const [model, setModel] = useState('Auto ARIMA (AIC search)')
+  const [model, setModel] = useState('Linear Regression')
   const [modelUsed, setModelUsed] = useState('—')
   const [running, setRunning] = useState(false)
   const [chartData, setChartData] = useState([])
@@ -38,7 +41,8 @@ export default function Forecasting() {
       setChartData(r.data.forecast_data || [])
       setCourseData(r.data.course_data || [])
       setProjected(r.data.projected_values || [])
-      setMetrics(r.data.model_metrics || {})
+      const nextMetrics = r.data.model_metrics || {}
+      setMetrics({ ...nextMetrics, mape: formatMape(nextMetrics.mape) })
       setModelUsed(r.data.model_used || '—')
     }).catch(() => {})
   }, [])
@@ -52,7 +56,7 @@ export default function Forecasting() {
       if (r.data.metrics) {
         setMetrics({
           mae: r.data.metrics.mae, rmse: r.data.metrics.rmse,
-          mape: `${r.data.metrics.mape}%`, r2: r.data.metrics.r2,
+          mape: formatMape(r.data.metrics.mape), r2: r.data.metrics.r2,
         })
       }
     }).catch(() => {}).finally(() => setRunning(false))
@@ -71,7 +75,7 @@ export default function Forecasting() {
         <div className="flex items-center justify-between mb-7">
           <div>
             <h1 className="text-xl font-bold text-gray-900">Forecasting</h1>
-            <p className="text-sm text-gray-400 mt-0.5">ARIMA-family employment rate predictions</p>
+            <p className="text-sm text-gray-400 mt-0.5">Employment rate predictions using configurable forecasting models</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right"><p className="text-xs font-semibold text-gray-700">Admin</p><p className="text-xs text-gray-400">Administrator</p></div>
@@ -85,8 +89,8 @@ export default function Forecasting() {
           <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5">
             <p className="text-xs text-blue-800">
               <span className="font-semibold">Model scope:</span> This page forecasts <span className="font-semibold">employment rate over time</span>,
-              so it uses ARIMA time-series variants. Random Forest and Logistic Regression are used in
-              employability classification for individual alumni, not trend forecasting.
+              with <span className="font-semibold">Linear Regression as default</span> and optional ARIMA variants.
+              Random Forest and Logistic Regression are for employability classification, not trend forecasting.
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-4 items-end">
@@ -103,9 +107,10 @@ export default function Forecasting() {
               </div>
             </div>
             <div className="flex-1">
-              <label className="block text-xs font-semibold mb-1.5" style={{ color: '#2d6a4f' }}>Time-series Model (ARIMA family)</label>
+              <label className="block text-xs font-semibold mb-1.5" style={{ color: '#2d6a4f' }}>Model</label>
               <select value={model} onChange={e => setModel(e.target.value)}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 bg-gray-50 focus:outline-none">
+                <option>Linear Regression</option>
                 <option>Auto ARIMA (AIC search)</option>
                 <option>ARIMA (p=2, d=1, q=2)</option>
                 <option>ARIMA (p=1, d=1, q=1)</option>

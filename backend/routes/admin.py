@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify, request, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from database import get_db
 from ml.arima_model import run_arima_forecast, parse_order
+from ml.train_lr import run_lr_forecast
 from ml.predictor import (
     predict_employability_details,
     predictor_feature_importance,
@@ -102,6 +103,10 @@ def _feature_number(features, *keys, default=0.0):
         if key in features and features[key] is not None:
             return _to_float(features[key], default)
     return float(default)
+
+
+def _format_percent_metric(value):
+    return f"{value}%" if isinstance(value, (int, float)) else str(value)
 
 
 def _normalize_grade(value):
@@ -293,7 +298,7 @@ def dashboard():
     # Add simple 1-year forecast
     if chart_data:
         rates = [r['overall_rate'] for r in emp_rows]
-        forecast = run_arima_forecast(rates, horizon=1)
+        forecast = run_lr_forecast(rates, horizon=1)
         next_year = str(emp_rows[-1]['year'] + 1)
         chart_data.append({
             'year': next_year,
@@ -394,7 +399,7 @@ def get_forecasting():
     years = [r['year'] for r in emp_rows]
 
     # Default 3-year forecast
-    result = run_arima_forecast(rates, horizon=3, order=None)
+    result = run_lr_forecast(rates, horizon=3)
     forecast_points = []
     for i, val in enumerate(result['forecast_values']):
         forecast_points.append({
@@ -427,8 +432,7 @@ def get_forecasting():
 def run_forecasting():
     data = request.get_json()
     horizon = int(data.get('horizon', 3))
-    model_str = data.get('model', 'ARIMA (2,1,2)')
-    order = parse_order(model_str)
+    model_str = data.get('model', 'Linear Regression')
 
     db = get_db()
     emp_rows = db.execute(
@@ -438,7 +442,11 @@ def run_forecasting():
     rates = [r['overall_rate'] for r in emp_rows]
     years = [r['year'] for r in emp_rows]
 
-    result = run_arima_forecast(rates, horizon=horizon, order=order)
+    if model_str.strip().lower() == 'linear regression':
+        result = run_lr_forecast(rates, horizon=horizon)
+    else:
+        order = parse_order(model_str)
+        result = run_arima_forecast(rates, horizon=horizon, order=order)
 
     historical = [{'year': str(r['year']), 'rate': r['overall_rate']} for r in emp_rows]
     forecast_points = []
@@ -649,12 +657,12 @@ def predict_report():
         'year_range': r['year_range'],
     } for r in reports]
 
-    # Run ARIMA to get latest metrics
+    # Run Linear Regression to get latest metrics
     emp_rows = db.execute(
         "SELECT overall_rate FROM employment_data ORDER BY year"
     ).fetchall()
     rates = [r['overall_rate'] for r in emp_rows]
-    forecast_result = run_arima_forecast(rates, horizon=1)
+    forecast_result = run_lr_forecast(rates, horizon=1)
     metrics = forecast_result['metrics']
 
     return jsonify({
@@ -662,7 +670,7 @@ def predict_report():
         'metrics': {
             'mae': str(metrics['mae']),
             'rmse': str(metrics['rmse']),
-            'mape': f"{metrics['mape']}%",
+            'mape': _format_percent_metric(metrics['mape']),
             'r2': str(metrics['r2']),
         },
     }), 200
@@ -674,7 +682,7 @@ def generate_report():
     data = request.get_json()
     report_type = data.get('type', data.get('report_type', 'PDF'))
     year_range = data.get('year_range', '2019\u20132024')
-    model_name = data.get('model', 'ARIMA (2,1,2)')
+    model_name = data.get('model', 'Linear Regression')
 
     report_name = f"Employment Forecast Report ({year_range})"
     db = get_db()
@@ -687,7 +695,11 @@ def generate_report():
     # Get metrics
     emp_rows = db.execute("SELECT overall_rate FROM employment_data ORDER BY year").fetchall()
     rates = [r['overall_rate'] for r in emp_rows]
-    fm = run_arima_forecast(rates, horizon=1)['metrics']
+    if model_name.strip().lower() == 'linear regression':
+        fm = run_lr_forecast(rates, horizon=1)['metrics']
+    else:
+        order = parse_order(model_name)
+        fm = run_arima_forecast(rates, horizon=1, order=order)['metrics']
 
     from datetime import date
     return jsonify({
@@ -702,7 +714,7 @@ def generate_report():
         'metrics': {
             'mae': str(fm['mae']),
             'rmse': str(fm['rmse']),
-            'mape': f"{fm['mape']}%",
+            'mape': _format_percent_metric(fm['mape']),
             'r2': str(fm['r2']),
         },
     }), 201
