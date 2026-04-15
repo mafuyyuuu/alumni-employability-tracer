@@ -106,7 +106,7 @@ export default function UploadModel() {
         <div className="flex items-center justify-between mb-7">
           <div>
             <h1 className="text-xl font-bold text-gray-900">Upload Data Model</h1>
-            <p className="text-sm text-gray-400 mt-0.5">Upload and manage ARIMA prediction models</p>
+            <p className="text-sm text-gray-400 mt-0.5">Upload training data and manage prediction models</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">
@@ -205,7 +205,7 @@ export default function UploadModel() {
                       checked={retrainAfterImport}
                       onChange={e => setRetrainAfterImport(e.target.checked)}
                     />
-                    Retrain Random Forest immediately after import
+                    Retrain RF + Linear Regression immediately after import
                   </label>
                 )}
               </div>
@@ -267,6 +267,9 @@ export default function UploadModel() {
                     <div className="pt-2 mt-2 border-t border-gray-100 space-y-1">
                       <p>
                         RF: <span className="font-semibold text-gray-700">{modelStatus.models.rf?.loaded ? 'Loaded' : 'Offline'}</span>
+                      </p>
+                      <p>
+                        LR: <span className="font-semibold text-gray-700">{modelStatus.models.lr?.loaded ? 'Loaded' : 'Offline'}</span>
                       </p>
                     </div>
                   )}

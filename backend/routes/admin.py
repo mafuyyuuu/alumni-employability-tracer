@@ -6,6 +6,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from database import get_db
 from ml.arima_model import run_arima_forecast, parse_order
 from ml.train_lr import run_lr_forecast
+from ml.rf_forecast import run_rf_forecast
 from ml.predictor import (
     predict_employability_details,
     predictor_feature_importance,
@@ -17,6 +18,7 @@ from ml.dataset_importer import (
     import_training_csv,
 )
 from ml.train_rf import train_random_forest
+from ml.train_employability_lr import train_linear_employability
 from functools import wraps
 
 admin_bp = Blueprint('admin', __name__)
@@ -116,6 +118,59 @@ def _normalize_age(value):
     age = _to_float(value, 22.0)
     # Expected alumni age range for scaling.
     return _clamp((age - 18.0) / 27.0)
+
+
+def _normalize_model_choice(raw):
+    text = (raw or '').strip().lower()
+    if text in ('rf', 'random forest', 'random forest regressor', 'random forest classifier'):
+        return 'rf'
+    if text in ('lr', 'linear regression', 'linear'):
+        return 'lr'
+    if text.startswith('arima') or 'auto arima' in text:
+        return 'arima'
+    return 'rf'
+
+
+def _forecast_result_for_model(rates, horizon, model_str):
+    normalized = _normalize_model_choice(model_str)
+    if normalized == 'rf':
+        return run_rf_forecast(rates, horizon=horizon)
+    if normalized == 'lr':
+        return run_lr_forecast(rates, horizon=horizon)
+    order = parse_order(model_str)
+    return run_arima_forecast(rates, horizon=horizon, order=order)
+
+
+def _predict_with_arima_employability(db, features):
+    row = db.execute(
+        "SELECT year, overall_rate FROM employment_data ORDER BY year"
+    ).fetchall()
+    if not row:
+        return {'error': 'Employment trend data is unavailable for ARIMA prediction.'}
+
+    rates = [float(r['overall_rate']) for r in row]
+    years = [int(r['year']) for r in row]
+    grad_year = int(_feature_number(features, 'graduation_year', 'graduationYear', default=years[-1]))
+
+    if grad_year in years:
+        rate = rates[years.index(grad_year)]
+    elif grad_year < years[0]:
+        rate = rates[0]
+    else:
+        horizon = max(grad_year - years[-1], 1)
+        forecast = run_arima_forecast(rates, horizon=horizon, order=None)
+        rate = float(forecast['forecast_values'][-1])
+
+    probability = _clamp(rate / 100.0)
+    prediction = 1 if probability >= 0.5 else 0
+    return {
+        'label': 'Employed' if prediction == 1 else 'Unemployed',
+        'prediction': prediction,
+        'probability_employed': round(probability, 4),
+        'model_used': 'arima',
+        'requested_model': 'arima',
+        'model_note': 'ARIMA employability mode estimates cohort-level probability from historical employment trend.',
+    }
 
 
 def _read_prediction_settings(db):
@@ -276,6 +331,7 @@ def _predict_with_voter_weights(features, voter_fields):
 @admin_required
 def dashboard():
     db = get_db()
+    model_str = request.args.get('model', 'Linear Regression')
 
     total_alumni = db.execute(
         "SELECT COUNT(*) as cnt FROM users WHERE role = 'alumni'"
@@ -295,9 +351,10 @@ def dashboard():
     chart_data = [{'year': str(r['year']), 'rate': r['overall_rate']} for r in emp_rows]
 
     # Add simple 1-year forecast
+    forecast = None
     if chart_data:
         rates = [r['overall_rate'] for r in emp_rows]
-        forecast = run_lr_forecast(rates, horizon=1)
+        forecast = _forecast_result_for_model(rates, horizon=1, model_str=model_str)
         next_year = str(emp_rows[-1]['year'] + 1)
         chart_data.append({
             'year': next_year,
@@ -305,15 +362,22 @@ def dashboard():
             'forecast': True,
         })
 
+    margin_of_error = 1.1
+    if forecast:
+        mape = forecast.get('metrics', {}).get('mape')
+        if isinstance(mape, (int, float)):
+            margin_of_error = round(float(mape), 1)
+
     return jsonify({
         'metrics': {
             'total_alumni': total_alumni,
             'employment_rate': employment_rate,
             'employment_rate_change': 4.6,
             'graduate_success': 97.5,
-            'margin_of_error': 1.1,
+            'margin_of_error': margin_of_error,
         },
         'employment_data': chart_data,
+        'model_used': (forecast or {}).get('model_used', 'Linear Regression'),
     }), 200
 
 
@@ -398,7 +462,7 @@ def get_forecasting():
     years = [r['year'] for r in emp_rows]
 
     # Default 3-year forecast
-    result = run_lr_forecast(rates, horizon=3)
+    result = _forecast_result_for_model(rates, horizon=3, model_str='Linear Regression')
     forecast_points = []
     for i, val in enumerate(result['forecast_values']):
         forecast_points.append({
@@ -422,7 +486,7 @@ def get_forecasting():
             for i, v in enumerate(result['forecast_values'])
         ],
         'model_metrics': result['metrics'],
-        'model_used': result.get('model_used', 'ARIMA (p=2, d=1, q=2)'),
+        'model_used': result.get('model_used', 'Linear Regression'),
     }), 200
 
 
@@ -441,11 +505,7 @@ def run_forecasting():
     rates = [r['overall_rate'] for r in emp_rows]
     years = [r['year'] for r in emp_rows]
 
-    if model_str.strip().lower() == 'linear regression':
-        result = run_lr_forecast(rates, horizon=horizon)
-    else:
-        order = parse_order(model_str)
-        result = run_arima_forecast(rates, horizon=horizon, order=order)
+    result = _forecast_result_for_model(rates, horizon=horizon, model_str=model_str)
 
     historical = [{'year': str(r['year']), 'rate': r['overall_rate']} for r in emp_rows]
     forecast_points = []
@@ -539,7 +599,7 @@ def predict_employability_route():
 
     features = payload.get('features')
     user_id = payload.get('user_id')
-    requested_model = payload.get('model', 'rf')
+    requested_model = _normalize_model_choice(payload.get('model', 'rf'))
 
     if features is None and user_id is not None:
         features = _alumni_features_from_db(db, user_id)
@@ -552,7 +612,10 @@ def predict_employability_route():
     settings = _read_prediction_settings(db)
     use_voter_weights = settings['use_voter_weights']
 
-    ml_details = predict_employability_details(features, model=requested_model)
+    if requested_model == 'arima':
+        ml_details = _predict_with_arima_employability(db, features)
+    else:
+        ml_details = predict_employability_details(features, model=requested_model)
     voter_fields = _read_voter_fields(db)
     voter_details = _predict_with_voter_weights(features, voter_fields)
 
@@ -590,12 +653,14 @@ def model_status():
 def retrain_model():
     db_path = current_app.config.get('DATABASE', os.getenv('DATABASE', 'plp_alumni.db'))
     rf_metadata = train_random_forest(database_path=db_path)
+    lr_metadata = train_linear_employability(database_path=db_path)
     ml_predictor._load_models()
     return jsonify({
         'message': 'Model retrained successfully',
         'model': rf_metadata,
         'models': {
             'rf': rf_metadata,
+            'lr': lr_metadata,
         },
     }), 200
 
@@ -625,10 +690,12 @@ def import_first_clean_dataset():
 
     if retrain_after_import:
         rf_metadata = train_random_forest(database_path=db_path)
+        lr_metadata = train_linear_employability(database_path=db_path)
         ml_predictor._load_models()
         response['message'] = 'Dataset imported and model retrained'
         response['models'] = {
             'rf': rf_metadata,
+            'lr': lr_metadata,
         }
 
     return jsonify(response), 200
@@ -652,22 +719,36 @@ def predict_report():
         'year_range': r['year_range'],
     } for r in reports]
 
-    # Run Linear Regression to get latest metrics
+    # Run all forecast models to get latest metrics
     emp_rows = db.execute(
         "SELECT overall_rate FROM employment_data ORDER BY year"
     ).fetchall()
     rates = [r['overall_rate'] for r in emp_rows]
-    forecast_result = run_lr_forecast(rates, horizon=1)
-    metrics = forecast_result['metrics']
+    model_runs = {
+        'Linear Regression': _forecast_result_for_model(rates, horizon=1, model_str='Linear Regression'),
+        'Random Forest Regressor': _forecast_result_for_model(rates, horizon=1, model_str='Random Forest'),
+        'Auto ARIMA (AIC search)': _forecast_result_for_model(rates, horizon=1, model_str='Auto ARIMA (AIC search)'),
+    }
+    default_metrics = model_runs['Linear Regression']['metrics']
+    metrics_by_model = {
+        model_name: {
+            'mae': str(result['metrics']['mae']),
+            'rmse': str(result['metrics']['rmse']),
+            'mape': _format_percent_metric(result['metrics']['mape']),
+            'r2': str(result['metrics']['r2']),
+        }
+        for model_name, result in model_runs.items()
+    }
 
     return jsonify({
         'reports': report_list,
         'metrics': {
-            'mae': str(metrics['mae']),
-            'rmse': str(metrics['rmse']),
-            'mape': _format_percent_metric(metrics['mape']),
-            'r2': str(metrics['r2']),
+            'mae': str(default_metrics['mae']),
+            'rmse': str(default_metrics['rmse']),
+            'mape': _format_percent_metric(default_metrics['mape']),
+            'r2': str(default_metrics['r2']),
         },
+        'metrics_by_model': metrics_by_model,
     }), 200
 
 
@@ -690,11 +771,30 @@ def generate_report():
     # Get metrics
     emp_rows = db.execute("SELECT overall_rate FROM employment_data ORDER BY year").fetchall()
     rates = [r['overall_rate'] for r in emp_rows]
-    if model_name.strip().lower() == 'linear regression':
-        fm = run_lr_forecast(rates, horizon=1)['metrics']
+    metrics_by_model = None
+    model_choice = _normalize_model_choice(model_name)
+    if str(model_name or '').strip().lower() == 'all models':
+        model_runs = {
+            'Linear Regression': _forecast_result_for_model(rates, horizon=1, model_str='Linear Regression'),
+            'Random Forest Regressor': _forecast_result_for_model(rates, horizon=1, model_str='Random Forest'),
+            'Auto ARIMA (AIC search)': _forecast_result_for_model(rates, horizon=1, model_str='Auto ARIMA (AIC search)'),
+        }
+        fm = model_runs['Linear Regression']['metrics']
+        metrics_by_model = {
+            model: {
+                'mae': str(result['metrics']['mae']),
+                'rmse': str(result['metrics']['rmse']),
+                'mape': _format_percent_metric(result['metrics']['mape']),
+                'r2': str(result['metrics']['r2']),
+            }
+            for model, result in model_runs.items()
+        }
+    elif model_choice == 'lr':
+        fm = _forecast_result_for_model(rates, horizon=1, model_str='Linear Regression')['metrics']
+    elif model_choice == 'rf':
+        fm = _forecast_result_for_model(rates, horizon=1, model_str='Random Forest')['metrics']
     else:
-        order = parse_order(model_name)
-        fm = run_arima_forecast(rates, horizon=1, order=order)['metrics']
+        fm = _forecast_result_for_model(rates, horizon=1, model_str=model_name)['metrics']
 
     from datetime import date
     return jsonify({
@@ -712,6 +812,7 @@ def generate_report():
             'mape': _format_percent_metric(fm['mape']),
             'r2': str(fm['r2']),
         },
+        'metrics_by_model': metrics_by_model,
     }), 201
 
 
@@ -845,9 +946,11 @@ def upload_model():
 
         if retrain_after_import:
             rf_metadata = train_random_forest(database_path=db_path)
+            lr_metadata = train_linear_employability(database_path=db_path)
             ml_predictor._load_models()
             trained_models = {
                 'rf': rf_metadata,
+                'lr': lr_metadata,
             }
             training_policy = 'uploaded_csv_imported_and_retrained'
 

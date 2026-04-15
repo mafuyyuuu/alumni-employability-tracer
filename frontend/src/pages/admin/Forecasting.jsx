@@ -89,8 +89,7 @@ export default function Forecasting() {
           <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5">
             <p className="text-xs text-blue-800">
               <span className="font-semibold">Model scope:</span> This page forecasts <span className="font-semibold">employment rate over time</span>,
-              with <span className="font-semibold">Linear Regression as default</span> and optional ARIMA variants.
-              Random Forest is for employability classification, not trend forecasting.
+              with <span className="font-semibold">Linear Regression as default</span>, plus Random Forest and ARIMA variants.
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-4 items-end">
@@ -111,6 +110,7 @@ export default function Forecasting() {
               <select value={model} onChange={e => setModel(e.target.value)}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 bg-gray-50 focus:outline-none">
                 <option>Linear Regression</option>
+                <option>Random Forest</option>
                 <option>Auto ARIMA (AIC search)</option>
                 <option>ARIMA (p=2, d=1, q=2)</option>
                 <option>ARIMA (p=1, d=1, q=1)</option>

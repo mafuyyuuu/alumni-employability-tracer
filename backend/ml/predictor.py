@@ -39,7 +39,7 @@ INPUT_ALIASES = {
     'hard_skills': 'hard_skills',
 }
 
-MODEL_KEYS = ('rf',)
+MODEL_KEYS = ('rf', 'lr')
 
 
 class EmployabilityPredictor:
@@ -51,6 +51,10 @@ class EmployabilityPredictor:
             'rf_features': os.path.join(self.models_dir, 'rf_features.joblib'),
             'rf_defaults': os.path.join(self.models_dir, 'rf_defaults.joblib'),
             'rf_metadata': os.path.join(self.models_dir, 'rf_metadata.joblib'),
+            'lr_model': os.path.join(self.models_dir, 'employability_lr_model.joblib'),
+            'lr_features': os.path.join(self.models_dir, 'lr_features.joblib'),
+            'lr_defaults': os.path.join(self.models_dir, 'lr_defaults.joblib'),
+            'lr_metadata': os.path.join(self.models_dir, 'lr_metadata.joblib'),
         }
 
         self.models = {}
@@ -157,13 +161,16 @@ class EmployabilityPredictor:
             return {'error': 'Selected model is not available.'}
 
         input_df = self._build_feature_row(input_data, expected_features, defaults)
-        prediction = int(model_obj.predict(input_df)[0])
+        raw_prediction = float(model_obj.predict(input_df)[0])
+        prediction = int(raw_prediction >= 0.5) if model_key == 'lr' else int(raw_prediction)
 
         probability_employed = None
         if hasattr(model_obj, 'predict_proba'):
             probs = model_obj.predict_proba(input_df)
             if probs is not None and len(probs.shape) == 2 and probs.shape[1] >= 2:
                 probability_employed = float(probs[0][1])
+        elif model_key == 'lr':
+            probability_employed = max(0.0, min(1.0, raw_prediction))
 
         result = {
             'label': 'Employed' if prediction == 1 else 'Unemployed',
