@@ -25,7 +25,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 
 export default function Forecasting() {
   const [horizon, setHorizon] = useState(2)
-  const [model, setModel] = useState('ARIMA (p=2, d=1, q=2)')
+  const [model, setModel] = useState('Linear Regression')
   const [running, setRunning] = useState(false)
   const [chartData, setChartData] = useState([])
   const [courseData, setCourseData] = useState([])
@@ -68,7 +68,7 @@ export default function Forecasting() {
         <div className="flex items-center justify-between mb-7">
           <div>
             <h1 className="text-xl font-bold text-gray-900">Forecasting</h1>
-            <p className="text-sm text-gray-400 mt-0.5">ARIMA-based employment rate predictions</p>
+            <p className="text-sm text-gray-400 mt-0.5">Linear Regression-based employment rate predictions</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right"><p className="text-xs font-semibold text-gray-700">Admin</p><p className="text-xs text-gray-400">Administrator</p></div>

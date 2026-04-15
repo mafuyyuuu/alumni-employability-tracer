@@ -51,7 +51,7 @@ export default function AdminDashboard() {
     { label: 'Total Alumni',     value: metrics.total_alumni,      sub: '+124 this year',            icon: MdPeople,       color: '#6366f1', bg: '#eef2ff' },
     { label: 'Employment Rate',  value: `${metrics.employment_rate}%`, sub: `↑ ${metrics.employment_rate_change}% vs last year`, icon: MdTrendingUp, color: '#2d6a4f', bg: '#f0faf5' },
     { label: 'Graduate Success', value: `${metrics.graduate_success}%`, sub: 'Of total graduates',      icon: MdSchool,       color: '#0ea5e9', bg: '#f0f9ff' },
-    { label: 'Margin of Error',  value: `±${metrics.margin_of_error}%`, sub: 'ARIMA model accuracy',   icon: MdErrorOutline, color: '#f59e0b', bg: '#fffbeb' },
+    { label: 'Margin of Error',  value: `±${metrics.margin_of_error}%`, sub: 'Forecast model accuracy',   icon: MdErrorOutline, color: '#f59e0b', bg: '#fffbeb' },
   ]
 
   const forecastYear = employmentData.find(d => d.forecast)?.year
@@ -96,9 +96,9 @@ export default function AdminDashboard() {
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h2 className="text-sm font-bold text-gray-900">Employment Rate Forecast</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Historical trend with 1-year ARIMA projection</p>
+                <p className="text-xs text-gray-400 mt-0.5">Historical trend with 1-year Linear Regression projection</p>
               </div>
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: '#f0faf5', color: '#2d6a4f' }}>ARIMA Model</span>
+              <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: '#f0faf5', color: '#2d6a4f' }}>Linear Regression Model</span>
             </div>
             <ResponsiveContainer width="100%" height={240}>
               <AreaChart data={employmentData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>

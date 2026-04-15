@@ -51,7 +51,7 @@ def dashboard():
     # Add simple 1-year forecast
     if chart_data:
         rates = [r['overall_rate'] for r in emp_rows]
-        forecast = run_arima_forecast(rates, horizon=1)
+        forecast = run_lr_forecast(rates, horizon=1)
         next_year = str(emp_rows[-1]['year'] + 1)
         chart_data.append({
             'year': next_year,
@@ -152,7 +152,7 @@ def get_forecasting():
     years = [r['year'] for r in emp_rows]
 
     # Default 3-year forecast
-    result = run_arima_forecast(rates, horizon=3)
+    result = run_lr_forecast(rates, horizon=3)
     forecast_points = []
     for i, val in enumerate(result['forecast_values']):
         forecast_points.append({
@@ -184,7 +184,7 @@ def get_forecasting():
 def run_forecasting():
     data = request.get_json()
     horizon = int(data.get('horizon', 3))
-    model_str = data.get('model', 'ARIMA (2,1,2)')
+    model_str = data.get('model', 'Linear Regression')
     order = parse_order(model_str)
 
     db = get_db()
@@ -301,12 +301,12 @@ def predict_report():
         'year_range': r['year_range'],
     } for r in reports]
 
-    # Run ARIMA to get latest metrics
+    # Run Linear Regression to get latest metrics
     emp_rows = db.execute(
         "SELECT overall_rate FROM employment_data ORDER BY year"
     ).fetchall()
     rates = [r['overall_rate'] for r in emp_rows]
-    forecast_result = run_arima_forecast(rates, horizon=1)
+    forecast_result = run_lr_forecast(rates, horizon=1)
     metrics = forecast_result['metrics']
 
     return jsonify({
@@ -326,7 +326,7 @@ def generate_report():
     data = request.get_json()
     report_type = data.get('type', data.get('report_type', 'PDF'))
     year_range = data.get('year_range', '2019\u20132024')
-    model_name = data.get('model', 'ARIMA (2,1,2)')
+    model_name = data.get('model', 'Linear Regression')
 
     report_name = f"Employment Forecast Report ({year_range})"
     db = get_db()

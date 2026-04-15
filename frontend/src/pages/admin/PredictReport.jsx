@@ -8,7 +8,7 @@ export default function PredictReport() {
   const [generated, setGenerated] = useState(false)
   const [reportType, setReportType] = useState('PDF')
   const [yearRange, setYearRange] = useState('2019–2024')
-  const [model, setModel] = useState('ARIMA (2,1,2)')
+  const [model, setModel] = useState('Linear Regression')
   const [reports, setReports] = useState([])
   const [metrics, setMetrics] = useState({ mae: '—', rmse: '—', mape: '—', r2: '—' })
   const [loading, setLoading] = useState(true)
