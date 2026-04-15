@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout'
-import { MdSearch, MdPeople, MdEdit, MdBlock, MdCheckCircle } from 'react-icons/md'
+import { MdSearch, MdPeople, MdEdit, MdBlock, MdCheckCircle, MdInsights } from 'react-icons/md'
 import api from '../../services/api'
 
 const avatarColors = ['#6366f1', '#2d6a4f', '#0ea5e9', '#f59e0b', '#8b5cf6', '#10b981', '#ef4444']
@@ -11,19 +11,37 @@ export default function Users() {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('All')
   const [loading, setLoading] = useState(true)
+  const [predictionByUser, setPredictionByUser] = useState({})
+  const [predictingId, setPredictingId] = useState(null)
+  const [predictError, setPredictError] = useState('')
+  const [predictionModel, setPredictionModel] = useState('rf')
 
-  function fetchUsers() {
+  function modelLabel(code) {
+    const key = String(code || '').toLowerCase()
+    if (key === 'lr') return 'LR'
+    if (key === 'rf') return 'RF'
+    return key ? key.toUpperCase() : 'RF'
+  }
+
+  function fetchUsers(next = {}) {
+    const nextSearch = next.search ?? search
+    const nextFilter = next.filter ?? filter
     setLoading(true)
-    api.get('/admin/users', { params: { search, filter } }).then(r => {
+    api.get('/admin/users', { params: { search: nextSearch, filter: nextFilter } }).then(r => {
       setUsers(r.data.users || [])
       setStats(r.data.stats || {})
     }).catch(() => {}).finally(() => setLoading(false))
   }
 
-  useEffect(() => { fetchUsers() }, [filter])
+  useEffect(() => {
+    api.get('/admin/users', { params: { search: '', filter: 'All' } }).then(r => {
+      setUsers(r.data.users || [])
+      setStats(r.data.stats || {})
+    }).catch(() => {}).finally(() => setLoading(false))
+  }, [])
 
   function handleSearchKey(e) {
-    if (e.key === 'Enter') fetchUsers()
+    if (e.key === 'Enter') fetchUsers({ search })
   }
 
   function toggleStatus(user) {
@@ -31,6 +49,18 @@ export default function Users() {
     api.put(`/admin/users/${user.id}`, { status: newStatus }).then(() => {
       setUsers(prev => prev.map(u => u.id === user.id ? { ...u, status: newStatus } : u))
     }).catch(() => {})
+  }
+
+  function predictForUser(userId) {
+    setPredictError('')
+    setPredictingId(userId)
+    api.post('/admin/predict-employability', { user_id: userId, model: predictionModel }).then(r => {
+      if (r.data?.prediction) {
+        setPredictionByUser(prev => ({ ...prev, [userId]: r.data.prediction }))
+      }
+    }).catch((err) => {
+      setPredictError(err.response?.data?.error || 'Prediction failed. Try retraining model first.')
+    }).finally(() => setPredictingId(null))
   }
 
   return (
@@ -74,14 +104,28 @@ export default function Users() {
           </div>
           <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
             {['All', 'Active', 'Employed', 'Unemployed'].map(f => (
-              <button key={f} onClick={() => setFilter(f)}
+              <button key={f} onClick={() => { setFilter(f); fetchUsers({ filter: f }) }}
                 className="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all"
                 style={filter === f ? { background: '#2d6a4f', color: '#fff' } : { color: '#6b7280' }}>
                 {f}
               </button>
             ))}
           </div>
+          <div className="sm:w-44">
+            <label className="block text-[11px] font-semibold text-gray-500 mb-1">Prediction Model</label>
+            <select
+              value={predictionModel}
+              onChange={e => setPredictionModel(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 bg-white focus:outline-none"
+            >
+              <option value="rf">Random Forest (Recommended)</option>
+              <option value="lr">Logistic Regression</option>
+            </select>
+          </div>
         </div>
+        {predictError && (
+          <p className="text-xs text-red-500 mb-4">{predictError}</p>
+        )}
 
         {/* Table */}
         <div className="bg-white rounded-2xl overflow-hidden" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
@@ -108,11 +152,30 @@ export default function Users() {
               <span className="col-span-2 text-xs text-gray-500">{u.course}</span>
               <span className="col-span-1 text-xs text-gray-500 text-center">{u.year}</span>
               <div className="col-span-2 flex justify-center">
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1"
-                  style={u.employed ? { background: '#f0faf5', color: '#2d6a4f' } : { background: '#fff7ed', color: '#ea580c' }}>
-                  {u.employed ? <MdCheckCircle className="text-xs" /> : null}
-                  {u.employed ? 'Employed' : 'Seeking'}
-                </span>
+                {(() => {
+                  const pred = predictionByUser[u.id]
+                  const confidence = pred?.probability_employed != null
+                    ? ` (${Math.round(pred.probability_employed * 100)}%)`
+                    : ''
+                  return (
+                    <div className="text-center">
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1"
+                        style={u.employed ? { background: '#f0faf5', color: '#2d6a4f' } : { background: '#fff7ed', color: '#ea580c' }}>
+                        {u.employed ? <MdCheckCircle className="text-xs" /> : null}
+                        {u.employed ? 'Employed' : 'Seeking'}
+                      </span>
+                      {pred && (
+                        <p className="text-[11px] mt-1" style={{ color: pred.label === 'Employed' ? '#2d6a4f' : '#ea580c' }}>
+                          {pred.mode === 'voter_weighted'
+                            ? 'Voter'
+                            : pred.mode === 'voter_fallback'
+                              ? `Voter Fallback${pred.requested_model ? ` (${modelLabel(pred.requested_model)})` : ''}`
+                              : `ML ${modelLabel(pred.model_used)}`}: {pred.label}{confidence}
+                        </p>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
               <div className="col-span-2 flex justify-center">
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
@@ -122,6 +185,16 @@ export default function Users() {
               </div>
               <div className="col-span-1 flex justify-end gap-1">
                 <button className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors rounded-lg hover:bg-blue-50"><MdEdit className="text-sm" /></button>
+                <button
+                  onClick={() => predictForUser(u.id)}
+                  className="p-1.5 text-gray-400 hover:text-green-600 transition-colors rounded-lg hover:bg-green-50"
+                  title="Run employability prediction"
+                  disabled={predictingId === u.id}
+                >
+                  {predictingId === u.id
+                    ? <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
+                    : <MdInsights className="text-sm" />}
+                </button>
                 <button onClick={() => toggleStatus(u)} className="p-1.5 text-gray-400 hover:text-orange-500 transition-colors rounded-lg hover:bg-orange-50"
                   title={u.status === 'Active' ? 'Deactivate' : 'Activate'}><MdBlock className="text-sm" /></button>
               </div>

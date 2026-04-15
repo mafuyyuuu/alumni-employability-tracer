@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout'
-import { MdSave, MdRefresh, MdToggleOn, MdToggleOff } from 'react-icons/md'
+import { MdSave, MdRefresh, MdToggleOn, MdToggleOff, MdAutoFixHigh } from 'react-icons/md'
 import api from '../../services/api'
 
 const defaultFields = [
@@ -16,12 +16,16 @@ const defaultFields = [
 
 export default function VoterConfig() {
   const [fields, setFields] = useState(defaultFields)
+  const [useVoterWeights, setUseVoterWeights] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [suggesting, setSuggesting] = useState(false)
+  const [suggestError, setSuggestError] = useState('')
 
   useEffect(() => {
     api.get('/admin/voter-config').then(r => {
       if (r.data.config && r.data.config.length) setFields(r.data.config)
+      setUseVoterWeights(Boolean(r.data.use_voter_weights))
     }).catch(() => {})
   }, [])
 
@@ -37,7 +41,7 @@ export default function VoterConfig() {
 
   function save() {
     setSaving(true)
-    api.put('/admin/voter-config', { config: fields }).then(() => {
+    api.put('/admin/voter-config', { config: fields, use_voter_weights: useVoterWeights }).then(() => {
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
     }).catch(() => alert('Failed to save configuration')).finally(() => setSaving(false))
@@ -45,7 +49,24 @@ export default function VoterConfig() {
 
   function reset() {
     setFields(defaultFields)
+    setUseVoterWeights(false)
     setSaved(false)
+  }
+
+  async function applySuggestedWeights() {
+    setSuggesting(true)
+    setSuggestError('')
+    setSaved(false)
+    try {
+      const r = await api.post('/admin/voter-config/suggest', {})
+      if (r.data?.config?.length) {
+        setFields(r.data.config)
+      }
+    } catch (err) {
+      setSuggestError(err.response?.data?.error || 'Unable to load ML suggested weights')
+    } finally {
+      setSuggesting(false)
+    }
   }
 
   const totalWeight = fields.filter(f => f.enabled).reduce((s, f) => s + f.weight, 0)
@@ -71,22 +92,58 @@ export default function VoterConfig() {
         <div className="flex flex-col lg:flex-row gap-5">
           {/* Fields config table */}
           <div className="flex-1 bg-white rounded-2xl p-6" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+            <div className="mb-5 p-4 rounded-xl border border-gray-100 bg-gray-50">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-bold text-gray-900">Prediction Decision Mode</h2>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {useVoterWeights
+                      ? 'Voter weights are the active decision maker for employability prediction.'
+                      : 'ML model is the default decision maker. Voter weights are saved but inactive.'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => { setUseVoterWeights(prev => !prev); setSaved(false) }}
+                  className="text-3xl transition-colors"
+                  style={{ color: useVoterWeights ? '#2d6a4f' : '#d1d5db' }}
+                  title="Toggle prediction mode"
+                >
+                  {useVoterWeights ? <MdToggleOn /> : <MdToggleOff />}
+                </button>
+              </div>
+            </div>
+
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-sm font-bold text-gray-900">Prediction Factors</h2>
               <span className="text-xs font-semibold px-2.5 py-1 rounded-full"
-                style={{ background: totalWeight === 100 ? '#f0faf5' : '#fff7ed', color: totalWeight === 100 ? '#2d6a4f' : '#ea580c' }}>
-                Total: {totalWeight}%{totalWeight !== 100 ? ' (should be 100%)' : ''}
+                style={{
+                  background: totalWeight === 100 || !useVoterWeights ? '#f0faf5' : '#fff7ed',
+                  color: totalWeight === 100 || !useVoterWeights ? '#2d6a4f' : '#ea580c',
+                }}>
+                Total: {totalWeight}%{totalWeight !== 100 && useVoterWeights ? ' (should be 100%)' : ''}
               </span>
             </div>
 
-            <div className="grid grid-cols-12 text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 px-1">
+            {!useVoterWeights && (
+              <p className="text-xs text-gray-400 mb-2">
+                Voter weighting is currently inactive. These factors are saved as standby configuration.
+              </p>
+            )}
+
+            <div
+              className="grid grid-cols-12 text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 px-1"
+              style={!useVoterWeights ? { filter: 'grayscale(100%) blur(0.2px)', opacity: 0.65 } : {}}
+            >
               <span className="col-span-1">On</span>
               <span className="col-span-5">Factor</span>
               <span className="col-span-3">Variable Key</span>
               <span className="col-span-3 text-right">Weight (%)</span>
             </div>
 
-            <div className="space-y-2">
+            <div
+              className="space-y-2"
+              style={!useVoterWeights ? { filter: 'grayscale(100%) blur(0.2px)', opacity: 0.65 } : {}}
+            >
               {fields.map(f => (
                 <div key={f.id} className="grid grid-cols-12 items-center p-3 rounded-xl transition-all"
                   style={{ background: f.enabled ? '#f9fafb' : '#fafafa', opacity: f.enabled ? 1 : 0.55 }}>
@@ -111,7 +168,15 @@ export default function VoterConfig() {
               ))}
             </div>
 
-            <div className="flex justify-end gap-3 mt-5 pt-5 border-t border-gray-100">
+            <div className="flex justify-between flex-wrap gap-3 mt-5 pt-5 border-t border-gray-100">
+              <button
+                onClick={applySuggestedWeights}
+                disabled={suggesting}
+                className="px-5 py-2.5 border border-indigo-200 rounded-xl text-sm font-semibold text-indigo-700 hover:bg-indigo-50 transition-colors disabled:opacity-60 flex items-center gap-2"
+              >
+                {suggesting ? 'Applying…' : <><MdAutoFixHigh /> Use ML Suggested Weights</>}
+              </button>
+              <div className="flex gap-3">
               <button onClick={reset}
                 className="px-5 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors flex items-center gap-2">
                 <MdRefresh /> Reset
@@ -121,12 +186,20 @@ export default function VoterConfig() {
                 style={{ background: '#2d6a4f' }}>
                 {saved ? <><span>✓</span> Saved!</> : <><MdSave /> Save Configuration</>}
               </button>
+              </div>
             </div>
+            {suggestError && <p className="text-xs text-red-500 mt-3">{suggestError}</p>}
           </div>
 
           {/* Info panel */}
-          <div className="w-full lg:w-64 space-y-4">
-            <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+            <div className="w-full lg:w-64 space-y-4">
+            <div
+              className="bg-white rounded-2xl p-5"
+              style={{
+                boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                ...(useVoterWeights ? {} : { filter: 'grayscale(100%) blur(0.2px)', opacity: 0.65 }),
+              }}
+            >
               <h3 className="text-xs font-bold text-gray-900 mb-3">Active Factors</h3>
               <div className="space-y-2">
                 {fields.filter(f => f.enabled).map(f => (
@@ -145,7 +218,8 @@ export default function VoterConfig() {
               <ul className="space-y-2 text-xs text-gray-500">
                 <li className="flex gap-2"><span className="text-green-500 flex-shrink-0">•</span> Weights must sum to 100%</li>
                 <li className="flex gap-2"><span className="text-green-500 flex-shrink-0">•</span> Disabled factors are excluded from the model</li>
-                <li className="flex gap-2"><span className="text-green-500 flex-shrink-0">•</span> Changes take effect on the next forecast run</li>
+                <li className="flex gap-2"><span className="text-green-500 flex-shrink-0">•</span> ML mode is default; voter mode is optional via toggle above</li>
+                <li className="flex gap-2"><span className="text-green-500 flex-shrink-0">•</span> Voter settings apply to employability prediction, not ARIMA trend forecasting</li>
               </ul>
             </div>
           </div>

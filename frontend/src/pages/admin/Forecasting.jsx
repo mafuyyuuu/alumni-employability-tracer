@@ -26,6 +26,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 export default function Forecasting() {
   const [horizon, setHorizon] = useState(2)
   const [model, setModel] = useState('Linear Regression')
+  const [modelUsed, setModelUsed] = useState('—')
   const [running, setRunning] = useState(false)
   const [chartData, setChartData] = useState([])
   const [courseData, setCourseData] = useState([])
@@ -38,6 +39,7 @@ export default function Forecasting() {
       setCourseData(r.data.course_data || [])
       setProjected(r.data.projected_values || [])
       setMetrics(r.data.model_metrics || {})
+      setModelUsed(r.data.model_used || '—')
     }).catch(() => {})
   }, [])
 
@@ -46,6 +48,7 @@ export default function Forecasting() {
     api.post('/admin/forecasting/run', { horizon: horizon + 1, model }).then(r => {
       setChartData(r.data.data || [])
       setProjected(r.data.forecast_values || [])
+      setModelUsed(r.data.model_used || model)
       if (r.data.metrics) {
         setMetrics({
           mae: r.data.metrics.mae, rmse: r.data.metrics.rmse,
@@ -79,6 +82,13 @@ export default function Forecasting() {
         {/* Config + Run */}
         <div className="bg-white rounded-2xl p-5 mb-5" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <h2 className="text-sm font-bold text-gray-900 mb-4">Forecast Configuration</h2>
+          <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5">
+            <p className="text-xs text-blue-800">
+              <span className="font-semibold">Model scope:</span> This page forecasts <span className="font-semibold">employment rate over time</span>,
+              so it uses ARIMA time-series variants. Random Forest and Logistic Regression are used in
+              employability classification for individual alumni, not trend forecasting.
+            </p>
+          </div>
           <div className="flex flex-col sm:flex-row gap-4 items-end">
             <div className="flex-1">
               <label className="block text-xs font-semibold mb-1.5" style={{ color: '#2d6a4f' }}>Forecast Horizon</label>
@@ -97,9 +107,10 @@ export default function Forecasting() {
               <select value={model} onChange={e => setModel(e.target.value)}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 bg-gray-50 focus:outline-none">
                 <option>Linear Regression</option>
+                <option>Auto ARIMA (AIC search)</option>
                 <option>ARIMA (p=2, d=1, q=2)</option>
                 <option>ARIMA (p=1, d=1, q=1)</option>
-                <option>Auto ARIMA</option>
+                <option>ARIMA (p=3, d=1, q=1)</option>
               </select>
             </div>
             <button onClick={runForecast} disabled={running}
@@ -124,7 +135,12 @@ export default function Forecasting() {
                 <h2 className="text-sm font-bold text-gray-900">Employment Rate Forecast</h2>
                 <p className="text-xs text-gray-400 mt-0.5">Historical + projected trend</p>
               </div>
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: '#f0faf5', color: '#2d6a4f' }}>Live Data</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: '#f0faf5', color: '#2d6a4f' }}>Live Data</span>
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: '#eef2ff', color: '#4338ca' }}>
+                  {modelUsed}
+                </span>
+              </div>
             </div>
             <ResponsiveContainer width="100%" height={260}>
               <AreaChart data={displayData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>

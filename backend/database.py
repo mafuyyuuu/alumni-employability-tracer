@@ -124,6 +124,34 @@ CREATE TABLE IF NOT EXISTS voter_config (
     weight INTEGER DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS prediction_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    use_voter_weights INTEGER DEFAULT 0,
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS ml_training_rows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_name TEXT NOT NULL,
+    source_row_id TEXT NOT NULL,
+    course TEXT NOT NULL,
+    graduation_year INTEGER NOT NULL,
+    age INTEGER NOT NULL,
+    avg_grade REAL NOT NULL,
+    avg_prof_grade REAL NOT NULL,
+    avg_elec_grade REAL NOT NULL,
+    ojt_grade REAL NOT NULL,
+    soft_skills REAL NOT NULL,
+    hard_skills REAL NOT NULL,
+    employed INTEGER NOT NULL,
+    is_active INTEGER DEFAULT 1,
+    imported_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(source_name, source_row_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ml_training_rows_active
+ON ml_training_rows (is_active, source_name);
+
 CREATE TABLE IF NOT EXISTS reports (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -141,6 +169,8 @@ CREATE TABLE IF NOT EXISTS model_uploads (
     file_size INTEGER DEFAULT 0,
     records INTEGER DEFAULT 0,
     status TEXT DEFAULT 'Active',
+    sha256 TEXT DEFAULT '',
+    applied_to_training INTEGER DEFAULT 0,
     uploaded_at TEXT DEFAULT (datetime('now'))
 );
 """
@@ -166,6 +196,8 @@ def init_db():
     # Migrations for existing DBs
     migrations = [
         "ALTER TABLE jobs ADD COLUMN category TEXT DEFAULT ''",
+        "ALTER TABLE model_uploads ADD COLUMN sha256 TEXT DEFAULT ''",
+        "ALTER TABLE model_uploads ADD COLUMN applied_to_training INTEGER DEFAULT 0",
     ]
     for m in migrations:
         try:
