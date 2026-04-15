@@ -205,7 +205,7 @@ export default function UploadModel() {
                       checked={retrainAfterImport}
                       onChange={e => setRetrainAfterImport(e.target.checked)}
                     />
-                    Retrain RF/LR immediately after import
+                    Retrain Random Forest immediately after import
                   </label>
                 )}
               </div>
@@ -267,9 +267,6 @@ export default function UploadModel() {
                     <div className="pt-2 mt-2 border-t border-gray-100 space-y-1">
                       <p>
                         RF: <span className="font-semibold text-gray-700">{modelStatus.models.rf?.loaded ? 'Loaded' : 'Offline'}</span>
-                      </p>
-                      <p>
-                        LR: <span className="font-semibold text-gray-700">{modelStatus.models.lr?.loaded ? 'Loaded' : 'Offline'}</span>
                       </p>
                     </div>
                   )}

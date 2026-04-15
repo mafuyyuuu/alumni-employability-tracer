@@ -39,7 +39,7 @@ INPUT_ALIASES = {
     'hard_skills': 'hard_skills',
 }
 
-MODEL_KEYS = ('rf', 'lr')
+MODEL_KEYS = ('rf',)
 
 
 class EmployabilityPredictor:
@@ -51,10 +51,6 @@ class EmployabilityPredictor:
             'rf_features': os.path.join(self.models_dir, 'rf_features.joblib'),
             'rf_defaults': os.path.join(self.models_dir, 'rf_defaults.joblib'),
             'rf_metadata': os.path.join(self.models_dir, 'rf_metadata.joblib'),
-            'lr_model': os.path.join(self.models_dir, 'employability_lr_model.joblib'),
-            'lr_features': os.path.join(self.models_dir, 'lr_features.joblib'),
-            'lr_defaults': os.path.join(self.models_dir, 'lr_defaults.joblib'),
-            'lr_metadata': os.path.join(self.models_dir, 'lr_metadata.joblib'),
         }
 
         self.models = {}

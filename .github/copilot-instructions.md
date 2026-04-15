@@ -32,7 +32,7 @@ npm run lint                      # ESLint check
 - **`services/`**: Business logic, including `job_fetcher.py` for job aggregation
 - **`ml/`**: Machine learning models:
   - `predictor.py`: EmployabilityPredictor class for predicting job fit and employment likelihood
-  - `train_lr.py`: Logistic Regression model training
+  - `train_lr.py`: Linear Regression forecasting utilities
   - `train_rf.py`: Random Forest model training
   - `arima_model.py`: ARIMA forecasting for employment rates
   - `saved_models/`: Persisted trained models (joblib format)
@@ -82,9 +82,9 @@ npm run lint                      # ESLint check
 - **Schema**: See `database.py` for CREATE TABLE statements
 
 ### ML Models
-- **Training**: `python ml/train_lr.py` or `python ml/train_rf.py` (saves to `ml/saved_models/`)
+- **Training**: `python ml/train_rf.py` (saves to `ml/saved_models/`)
 - **Prediction**: `EmployabilityPredictor` class in `ml/predictor.py` loads models via joblib
-- **Forecasting**: ARIMA models in `ml/arima_model.py` for employment rate trends
+- **Forecasting**: Linear Regression (`ml/train_lr.py`) and ARIMA (`ml/arima_model.py`) for employment rate trends
 
 ### Linting
 - **Frontend**: `npm run lint` (ESLint with React hooks and refresh plugins)

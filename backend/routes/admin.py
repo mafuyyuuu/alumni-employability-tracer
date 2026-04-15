@@ -17,7 +17,6 @@ from ml.dataset_importer import (
     import_training_csv,
 )
 from ml.train_rf import train_random_forest
-from ml.train_lr import train_logistic_regression
 from functools import wraps
 
 admin_bp = Blueprint('admin', __name__)
@@ -591,14 +590,12 @@ def model_status():
 def retrain_model():
     db_path = current_app.config.get('DATABASE', os.getenv('DATABASE', 'plp_alumni.db'))
     rf_metadata = train_random_forest(database_path=db_path)
-    lr_metadata = train_logistic_regression(database_path=db_path)
     ml_predictor._load_models()
     return jsonify({
-        'message': 'Models retrained successfully',
+        'message': 'Model retrained successfully',
         'model': rf_metadata,
         'models': {
             'rf': rf_metadata,
-            'lr': lr_metadata,
         },
     }), 200
 
@@ -628,12 +625,10 @@ def import_first_clean_dataset():
 
     if retrain_after_import:
         rf_metadata = train_random_forest(database_path=db_path)
-        lr_metadata = train_logistic_regression(database_path=db_path)
         ml_predictor._load_models()
-        response['message'] = 'Dataset imported and models retrained'
+        response['message'] = 'Dataset imported and model retrained'
         response['models'] = {
             'rf': rf_metadata,
-            'lr': lr_metadata,
         }
 
     return jsonify(response), 200
@@ -850,11 +845,9 @@ def upload_model():
 
         if retrain_after_import:
             rf_metadata = train_random_forest(database_path=db_path)
-            lr_metadata = train_logistic_regression(database_path=db_path)
             ml_predictor._load_models()
             trained_models = {
                 'rf': rf_metadata,
-                'lr': lr_metadata,
             }
             training_policy = 'uploaded_csv_imported_and_retrained'
 
@@ -884,7 +877,7 @@ def upload_model():
         response['import'] = import_result
     if trained_models:
         response['models'] = trained_models
-        response['message'] = 'File uploaded, imported to training, and models retrained'
+        response['message'] = 'File uploaded, imported to training, and model retrained'
 
     return jsonify(response), 201
 

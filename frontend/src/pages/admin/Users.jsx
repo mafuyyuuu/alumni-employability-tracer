@@ -14,11 +14,9 @@ export default function Users() {
   const [predictionByUser, setPredictionByUser] = useState({})
   const [predictingId, setPredictingId] = useState(null)
   const [predictError, setPredictError] = useState('')
-  const [predictionModel, setPredictionModel] = useState('rf')
 
   function modelLabel(code) {
     const key = String(code || '').toLowerCase()
-    if (key === 'lr') return 'LR'
     if (key === 'rf') return 'RF'
     return key ? key.toUpperCase() : 'RF'
   }
@@ -54,7 +52,7 @@ export default function Users() {
   function predictForUser(userId) {
     setPredictError('')
     setPredictingId(userId)
-    api.post('/admin/predict-employability', { user_id: userId, model: predictionModel }).then(r => {
+    api.post('/admin/predict-employability', { user_id: userId, model: 'rf' }).then(r => {
       if (r.data?.prediction) {
         setPredictionByUser(prev => ({ ...prev, [userId]: r.data.prediction }))
       }
@@ -110,17 +108,6 @@ export default function Users() {
                 {f}
               </button>
             ))}
-          </div>
-          <div className="sm:w-44">
-            <label className="block text-[11px] font-semibold text-gray-500 mb-1">Prediction Model</label>
-            <select
-              value={predictionModel}
-              onChange={e => setPredictionModel(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 bg-white focus:outline-none"
-            >
-              <option value="rf">Random Forest (Recommended)</option>
-              <option value="lr">Logistic Regression</option>
-            </select>
           </div>
         </div>
         {predictError && (

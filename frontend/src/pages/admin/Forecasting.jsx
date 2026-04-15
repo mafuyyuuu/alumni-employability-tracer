@@ -90,7 +90,7 @@ export default function Forecasting() {
             <p className="text-xs text-blue-800">
               <span className="font-semibold">Model scope:</span> This page forecasts <span className="font-semibold">employment rate over time</span>,
               with <span className="font-semibold">Linear Regression as default</span> and optional ARIMA variants.
-              Random Forest and Logistic Regression are for employability classification, not trend forecasting.
+              Random Forest is for employability classification, not trend forecasting.
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-4 items-end">
