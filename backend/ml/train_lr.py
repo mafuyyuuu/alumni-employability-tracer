@@ -66,6 +66,9 @@ def train_logistic_regression(database_path: str | None = None) -> dict:
 
 def run_lr_forecast(rates, horizon=3):
     """Forecast future employment rates using sklearn LinearRegression."""
+    def na_metrics():
+        return {'mae': 'N/A', 'rmse': 'N/A', 'mape': 'N/A', 'r2': 'N/A'}
+
     normalized_rates = []
     try:
         from sklearn.linear_model import LinearRegression
@@ -78,7 +81,7 @@ def run_lr_forecast(rates, horizon=3):
             last = normalized_rates[-1] if normalized_rates else 70.0
             return {
                 'forecast_values': [round(last + 3.0 * (i + 1), 1) for i in range(horizon)],
-                'metrics': {'mae': 1.24, 'rmse': 1.58, 'mape': 2.1, 'r2': 0.97},
+                'metrics': na_metrics(),
                 'model_used': 'Linear Regression',
             }
 
@@ -114,17 +117,35 @@ def run_lr_forecast(rates, horizon=3):
         horizon = max(int(horizon or 1), 1)
         if len(normalized_rates) >= 2:
             trend = np.polyfit(range(len(normalized_rates)), normalized_rates, 1)
+            x_hist = np.array(range(len(normalized_rates)))
+            y_hist = np.array(normalized_rates, dtype=float)
+            y_pred = np.polyval(trend, x_hist)
             forecast_values = [
                 round(float(np.polyval(trend, len(normalized_rates) + i)), 1)
                 for i in range(horizon)
             ]
+            mae = float(np.mean(np.abs(y_hist - y_pred)))
+            rmse = float(np.sqrt(np.mean((y_hist - y_pred) ** 2)))
+            with np.errstate(divide='ignore', invalid='ignore'):
+                mape_arr = np.abs((y_hist - y_pred) / y_hist) * 100
+                mape = float(np.nanmean(mape_arr))
+            ss_res = float(np.sum((y_hist - y_pred) ** 2))
+            ss_tot = float(np.sum((y_hist - np.mean(y_hist)) ** 2))
+            r2 = float(1 - (ss_res / ss_tot)) if ss_tot > 0 else 1.0
+            metrics = {
+                'mae': round(mae, 2),
+                'rmse': round(rmse, 2),
+                'mape': round(mape, 1),
+                'r2': round(r2, 2),
+            }
         else:
             last = normalized_rates[-1] if normalized_rates else 70.0
             forecast_values = [round(last + 3.0 * (i + 1), 1) for i in range(horizon)]
+            metrics = na_metrics()
 
         return {
             'forecast_values': forecast_values,
-            'metrics': {'mae': 1.24, 'rmse': 1.58, 'mape': 2.1, 'r2': 0.97},
+            'metrics': metrics,
             'model_used': 'Linear Regression',
         }
 

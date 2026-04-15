@@ -105,6 +105,10 @@ def _feature_number(features, *keys, default=0.0):
     return float(default)
 
 
+def _format_percent_metric(value):
+    return f"{value}%" if isinstance(value, (int, float)) else str(value)
+
+
 def _normalize_grade(value):
     return _clamp(_to_float(value) / 100.0)
 
@@ -666,7 +670,7 @@ def predict_report():
         'metrics': {
             'mae': str(metrics['mae']),
             'rmse': str(metrics['rmse']),
-            'mape': f"{metrics['mape']}%",
+            'mape': _format_percent_metric(metrics['mape']),
             'r2': str(metrics['r2']),
         },
     }), 200
@@ -710,7 +714,7 @@ def generate_report():
         'metrics': {
             'mae': str(fm['mae']),
             'rmse': str(fm['rmse']),
-            'mape': f"{fm['mape']}%",
+            'mape': _format_percent_metric(fm['mape']),
             'r2': str(fm['r2']),
         },
     }), 201

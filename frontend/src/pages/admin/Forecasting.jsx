@@ -9,6 +9,9 @@ import api from '../../services/api'
 
 const years = ['1 Year (2024)', '2 Years (2024–2025)', '3 Years (2024–2026)']
 
+const formatMape = (value) =>
+  typeof value === 'number' ? `${value}%` : (value || 'N/A')
+
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
   const isForecast = payload[0]?.payload?.forecast
@@ -38,7 +41,8 @@ export default function Forecasting() {
       setChartData(r.data.forecast_data || [])
       setCourseData(r.data.course_data || [])
       setProjected(r.data.projected_values || [])
-      setMetrics(r.data.model_metrics || {})
+      const nextMetrics = r.data.model_metrics || {}
+      setMetrics({ ...nextMetrics, mape: formatMape(nextMetrics.mape) })
       setModelUsed(r.data.model_used || '—')
     }).catch(() => {})
   }, [])
@@ -52,7 +56,7 @@ export default function Forecasting() {
       if (r.data.metrics) {
         setMetrics({
           mae: r.data.metrics.mae, rmse: r.data.metrics.rmse,
-          mape: `${r.data.metrics.mape}%`, r2: r.data.metrics.r2,
+          mape: formatMape(r.data.metrics.mape), r2: r.data.metrics.r2,
         })
       }
     }).catch(() => {}).finally(() => setRunning(false))
@@ -85,8 +89,8 @@ export default function Forecasting() {
           <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5">
             <p className="text-xs text-blue-800">
               <span className="font-semibold">Model scope:</span> This page forecasts <span className="font-semibold">employment rate over time</span>,
-              so it uses ARIMA time-series variants. Random Forest and Logistic Regression are used in
-              employability classification for individual alumni, not trend forecasting.
+              with <span className="font-semibold">Linear Regression as default</span> and optional ARIMA variants.
+              Random Forest and Logistic Regression are for employability classification, not trend forecasting.
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-4 items-end">
