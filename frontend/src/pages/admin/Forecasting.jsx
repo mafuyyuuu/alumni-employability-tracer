@@ -96,10 +96,10 @@ export default function Forecasting() {
               <label className="block text-xs font-semibold mb-1.5" style={{ color: '#2d6a4f' }}>Model</label>
               <select value={model} onChange={e => setModel(e.target.value)}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 bg-gray-50 focus:outline-none">
+                <option>Linear Regression</option>
                 <option>ARIMA (p=2, d=1, q=2)</option>
                 <option>ARIMA (p=1, d=1, q=1)</option>
                 <option>Auto ARIMA</option>
-                <option>Linear Regression</option>
               </select>
             </div>
             <button onClick={runForecast} disabled={running}

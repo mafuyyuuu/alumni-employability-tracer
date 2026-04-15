@@ -185,7 +185,6 @@ def run_forecasting():
     data = request.get_json()
     horizon = int(data.get('horizon', 3))
     model_str = data.get('model', 'Linear Regression')
-    order = parse_order(model_str)
 
     db = get_db()
     emp_rows = db.execute(
@@ -198,6 +197,7 @@ def run_forecasting():
     if model_str.strip().lower() == 'linear regression':
         result = run_lr_forecast(rates, horizon=horizon)
     else:
+        order = parse_order(model_str)
         result = run_arima_forecast(rates, horizon=horizon, order=order)
 
     historical = [{'year': str(r['year']), 'rate': r['overall_rate']} for r in emp_rows]
