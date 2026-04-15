@@ -36,3 +36,6 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+backend/ml/data/*.csv
+backend/ml/saved_models/*.joblib
