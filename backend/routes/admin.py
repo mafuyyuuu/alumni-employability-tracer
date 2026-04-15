@@ -694,7 +694,8 @@ def generate_report():
     if model_name.strip().lower() == 'linear regression':
         fm = run_lr_forecast(rates, horizon=1)['metrics']
     else:
-        fm = run_arima_forecast(rates, horizon=1)['metrics']
+        order = parse_order(model_name)
+        fm = run_arima_forecast(rates, horizon=1, order=order)['metrics']
 
     from datetime import date
     return jsonify({
