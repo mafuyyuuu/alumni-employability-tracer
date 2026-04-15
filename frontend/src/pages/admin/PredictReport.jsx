@@ -8,6 +8,7 @@ export default function PredictReport() {
   const [generated, setGenerated] = useState(false)
   const [reportType, setReportType] = useState('PDF')
   const [yearRange, setYearRange] = useState('2019–2024')
+  const [model, setModel] = useState('ARIMA (2,1,2)')
   const [reports, setReports] = useState([])
   const [metrics, setMetrics] = useState({ mae: '—', rmse: '—', mape: '—', r2: '—' })
   const [loading, setLoading] = useState(true)
@@ -23,7 +24,7 @@ export default function PredictReport() {
     setGenerating(true)
     setGenerated(false)
     try {
-      const r = await api.post('/admin/predict-report/generate', { type: reportType, year_range: yearRange })
+      const r = await api.post('/admin/predict-report/generate', { type: reportType, year_range: yearRange, model })
       if (r.data.report) setReports(prev => [r.data.report, ...prev])
       if (r.data.metrics) setMetrics(r.data.metrics)
       setGenerated(true)
@@ -102,10 +103,12 @@ export default function PredictReport() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold mb-1.5" style={{ color: '#2d6a4f' }}>Model</label>
-                  <select className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 bg-gray-50 focus:outline-none">
+                  <select value={model} onChange={e => setModel(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 bg-gray-50 focus:outline-none">
                     <option>ARIMA (2,1,2)</option>
                     <option>ARIMA (1,1,1)</option>
                     <option>Auto ARIMA</option>
+                    <option>Linear Regression</option>
                   </select>
                 </div>
               </div>

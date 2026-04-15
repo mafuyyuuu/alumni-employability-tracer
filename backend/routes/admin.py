@@ -4,6 +4,7 @@ from flask import Blueprint, jsonify, request, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from database import get_db
 from ml.arima_model import run_arima_forecast, parse_order
+from ml.train_lr import run_lr_forecast
 from ml.predictor import predict_employability
 from functools import wraps
 
@@ -194,7 +195,10 @@ def run_forecasting():
     rates = [r['overall_rate'] for r in emp_rows]
     years = [r['year'] for r in emp_rows]
 
-    result = run_arima_forecast(rates, horizon=horizon, order=order)
+    if model_str.strip().lower() == 'linear regression':
+        result = run_lr_forecast(rates, horizon=horizon)
+    else:
+        result = run_arima_forecast(rates, horizon=horizon, order=order)
 
     historical = [{'year': str(r['year']), 'rate': r['overall_rate']} for r in emp_rows]
     forecast_points = []
@@ -335,7 +339,10 @@ def generate_report():
     # Get metrics
     emp_rows = db.execute("SELECT overall_rate FROM employment_data ORDER BY year").fetchall()
     rates = [r['overall_rate'] for r in emp_rows]
-    fm = run_arima_forecast(rates, horizon=1)['metrics']
+    if model_name.strip().lower() == 'linear regression':
+        fm = run_lr_forecast(rates, horizon=1)['metrics']
+    else:
+        fm = run_arima_forecast(rates, horizon=1)['metrics']
 
     from datetime import date
     return jsonify({

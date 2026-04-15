@@ -99,6 +99,7 @@ export default function Forecasting() {
                 <option>ARIMA (p=2, d=1, q=2)</option>
                 <option>ARIMA (p=1, d=1, q=1)</option>
                 <option>Auto ARIMA</option>
+                <option>Linear Regression</option>
               </select>
             </div>
             <button onClick={runForecast} disabled={running}
