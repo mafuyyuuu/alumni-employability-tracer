@@ -23,8 +23,9 @@ def _linkedin_url(title):
     return f'https://www.linkedin.com/jobs/search/?keywords={q}&location=Philippines'
 
 def _jobstreet_url(title):
-    slug = urllib.parse.quote_plus(title).replace('+', '-').lower()
-    return f'https://www.jobstreet.com.ph/jobs/{slug}-jobs'
+    q = urllib.parse.quote_plus(title)
+    # JobStreet PH currently resolves keyword searches on this path.
+    return f'https://ph.jobstreet.com/jobs?keywords={q}'
 
 def _kalibrr_url(title):
     q = urllib.parse.quote_plus(title)
@@ -32,7 +33,8 @@ def _kalibrr_url(title):
 
 def _bossjob_url(title):
     q = urllib.parse.quote_plus(title)
-    return f'https://www.bossjob.ph/jobs?keyword={q}'
+    # Use locale path directly to avoid homepage redirects in some regions.
+    return f'https://bossjob.ph/en-us/onsite-job?keyword={q}'
 
 def _indeed_url(title):
     q = urllib.parse.quote_plus(title)
@@ -41,6 +43,34 @@ def _indeed_url(title):
 def _adzuna_url(title):
     q = urllib.parse.quote_plus(title)
     return f'https://www.adzuna.com.ph/search?q={q}'
+
+
+def _google_site_search(domain, title):
+    q = urllib.parse.quote_plus(f'site:{domain} {title} Philippines')
+    return f'https://www.google.com/search?q={q}'
+
+
+def _resolve_fallback_url(job):
+    source = (job.get('source') or '').strip()
+    title = (job.get('title') or '').strip()
+    if not title:
+        return job.get('url', '')
+
+    if source == 'BossJob':
+        return _google_site_search('bossjob.ph', title)
+    if source == 'JobStreet':
+        return _google_site_search('ph.jobstreet.com', title)
+    if source == 'Indeed':
+        return _indeed_url(title)
+    if source == 'Kalibrr':
+        return _kalibrr_url(title)
+    if source == 'LinkedIn':
+        return _linkedin_url(title + ' Philippines')
+    if source == 'Facebook Groups':
+        return _fb_search(title)
+    if source == 'Adzuna':
+        return _adzuna_url(title)
+    return job.get('url', '')
 
 
 # Map each program to job search keywords and category label
@@ -493,7 +523,7 @@ def fetch_from_jsearch(keyword, n=10):
                 'X-RapidAPI-Host': 'jsearch.p.rapidapi.com',
             },
             params={
-                'query': f'{keyword} in Philippines',
+                'query': keyword,
                 'num_pages': '1',
                 'date_posted': 'month',
             },
@@ -610,7 +640,59 @@ def fetch_from_adzuna(keyword, n=10):
     return None
 
 
-def get_external_jobs_for_course(course='', search_keyword=''):
+def _fallback_keyword_score(job, query):
+    phrase = (query or '').strip().lower()
+    if not phrase:
+        return 0
+
+    tokens = [t for t in phrase.split() if t]
+    fields = [
+        ('title', 220, 70),
+        ('company', 120, 45),
+        ('category', 90, 35),
+        ('location', 70, 25),
+        ('description', 30, 10),
+        ('source', 20, 8),
+    ]
+
+    score = 0
+    for field, phrase_weight, token_weight in fields:
+        value = (job.get(field, '') or '').lower()
+        if not value:
+            continue
+        if phrase in value:
+            score += phrase_weight
+        for token in tokens:
+            if token in value:
+                score += token_weight
+    return score
+
+
+def _dedupe_jobs(jobs):
+    seen = set()
+    deduped = []
+    for job in jobs:
+        key = (
+            (job.get('title', '') or '').strip().lower(),
+            (job.get('company', '') or '').strip().lower(),
+            (job.get('source', '') or '').strip().lower(),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(job)
+    return deduped
+
+
+def has_real_provider_keys():
+    return bool(
+        os.getenv('JSEARCH_API_KEY') or
+        os.getenv('JOOBLE_API_KEY') or
+        os.getenv('ADZUNA_APP_ID')
+    )
+
+
+def get_external_jobs_for_course(course='', search_keyword='', limit=30, real_only=False):
     """Return real-time external job listings for a given program/course.
 
     Priority:
@@ -622,31 +704,41 @@ def get_external_jobs_for_course(course='', search_keyword=''):
     If search_keyword is provided it overrides the program-based default keyword.
     Configure any API key in backend/.env to get real listings.
     """
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        limit = 30
+    limit = max(1, min(limit, 50))
+
     prog = (course or '').upper().strip()
     prog_info = PROGRAM_MAP.get(prog, {})
+    search_keyword = (search_keyword or '').strip()
 
     if search_keyword:
-        keyword = search_keyword + ' Philippines'
+        keyword = f'{search_keyword} in Philippines'
     else:
-        keyword = prog_info['keywords'][0] if prog_info else 'jobs Philippines'
+        keyword = f"{prog_info['keywords'][0]} in Philippines" if prog_info else 'jobs in Philippines'
 
     # 1. Try JSearch (Google Jobs aggregator) — direct apply URLs
     if os.getenv('JSEARCH_API_KEY'):
-        real = fetch_from_jsearch(keyword)
+        real = fetch_from_jsearch(keyword, n=limit)
         if real:
-            return real
+            return real[:limit]
 
     # 2. Try Jooble — free, good PH coverage, direct job links
     if os.getenv('JOOBLE_API_KEY'):
-        real = fetch_from_jooble(keyword)
+        real = fetch_from_jooble(keyword, n=limit)
         if real:
-            return real
+            return real[:limit]
 
     # 3. Try Adzuna
     if os.getenv('ADZUNA_APP_ID'):
-        real = fetch_from_adzuna(keyword)
+        real = fetch_from_adzuna(keyword, n=limit)
         if real:
-            return real
+            return real[:limit]
+
+    if real_only:
+        return []
 
     # 4. Fallback: curated mock data with platform search links
     program_jobs = list(MOCK_JOBS_BY_PROGRAM.get(prog, []))
@@ -660,4 +752,31 @@ def get_external_jobs_for_course(course='', search_keyword=''):
     fb_post = FACEBOOK_JOBS_BY_PROGRAM.get(prog)
     fb_jobs = [fb_post] if fb_post else []
 
-    return program_jobs + fb_jobs + GENERAL_EXTERNAL_JOBS
+    fallback_jobs = _dedupe_jobs(program_jobs + fb_jobs + GENERAL_EXTERNAL_JOBS)
+
+    if len(fallback_jobs) < limit:
+        expanded = []
+        for jobs in MOCK_JOBS_BY_PROGRAM.values():
+            expanded.extend(jobs)
+        random.shuffle(expanded)
+        fallback_jobs = _dedupe_jobs(fallback_jobs + expanded + GENERAL_EXTERNAL_JOBS)
+
+    # Recompute provider links at response time so fallback jobs don't keep stale
+    # homepage-prone URLs from old helper patterns.
+    resolved_jobs = []
+    for job in fallback_jobs:
+        j = dict(job)
+        j['url'] = _resolve_fallback_url(j)
+        resolved_jobs.append(j)
+    fallback_jobs = resolved_jobs
+
+    if search_keyword:
+        scored = []
+        for job in fallback_jobs:
+            score = _fallback_keyword_score(job, search_keyword)
+            if score > 0:
+                scored.append((score, job))
+        scored.sort(key=lambda item: (-item[0], item[1].get('title', '')))
+        return [job for _, job in scored][:limit]
+
+    return fallback_jobs[:limit]

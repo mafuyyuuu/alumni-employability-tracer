@@ -2,7 +2,13 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from database import get_db
 from functools import wraps
-from services.job_fetcher import get_external_jobs_for_course, is_job_recommended, SOURCE_COLORS, get_source_color
+from services.job_fetcher import (
+    get_external_jobs_for_course,
+    has_real_provider_keys,
+    is_job_recommended,
+    SOURCE_COLORS,
+    get_source_color,
+)
 
 jobs_bp = Blueprint('jobs', __name__)
 
@@ -132,14 +138,42 @@ def list_external_jobs():
     user = db.execute('SELECT course FROM users WHERE id = ?', [user_id]).fetchone()
     course = request.args.get('course', user['course'] if user else '') or ''
     search_keyword = request.args.get('keyword', '').strip()
+    real_only = request.args.get('real_only', '1').strip().lower() not in ('0', 'false', 'no')
 
-    jobs = get_external_jobs_for_course(course, search_keyword=search_keyword)
+    try:
+        page = int(request.args.get('page', 1))
+    except (TypeError, ValueError):
+        page = 1
+    page = max(1, page)
+
+    raw_per_page = request.args.get('per_page')
+    if raw_per_page is None:
+        raw_per_page = request.args.get('limit', 50)
+    try:
+        per_page = int(raw_per_page)
+    except (TypeError, ValueError):
+        per_page = 50
+    per_page = max(1, min(per_page, 50))
+
+    fetch_limit = 50
+    jobs = get_external_jobs_for_course(
+        course,
+        search_keyword=search_keyword,
+        limit=fetch_limit,
+        real_only=real_only,
+    )
+
+    total = len(jobs)
+    start = (page - 1) * per_page
+    end = start + per_page
+    paged_jobs = jobs[start:end]
+    has_more = end < total
 
     # Add source color and sequential IDs for frontend keys
     result = []
-    for i, j in enumerate(jobs):
+    for i, j in enumerate(paged_jobs):
         result.append({
-            'id': f"ext-{i}",
+            'id': f"ext-{start + i}",
             'title': j.get('title', ''),
             'company': j.get('company', ''),
             'location': j.get('location', 'Philippines'),
@@ -156,7 +190,16 @@ def list_external_jobs():
                            (j.get('program', '') == '' and is_job_recommended(j.get('title', ''), j.get('category', ''), course)),
         })
 
-    return jsonify({'jobs': result, 'course': course, 'total': len(result)}), 200
+    return jsonify({
+        'jobs': result,
+        'course': course,
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'has_more': has_more,
+        'real_only': real_only,
+        'providers_configured': has_real_provider_keys(),
+    }), 200
 
 
 @jobs_bp.route('', methods=['POST'])
