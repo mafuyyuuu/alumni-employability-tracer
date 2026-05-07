@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import AlumniLayout from '../../components/alumni/AlumniLayout'
 import {
@@ -16,6 +16,96 @@ const typeStyle = {
 }
 
 const TABS = ['For You', 'All Jobs', 'External Jobs']
+const PAGE_SIZE = 50
+
+function normalizeQuery(value = '') {
+  return String(value).toLowerCase().trim()
+}
+
+function queryTokens(query = '') {
+  const normalized = normalizeQuery(query)
+  return normalized ? normalized.split(/\s+/).filter(Boolean) : []
+}
+
+function parsePostedDate(value) {
+  const ts = Date.parse(value || '')
+  return Number.isNaN(ts) ? 0 : ts
+}
+
+function scoreField(text, phrase, tokens, exactWeight, includeWeight, tokenWeight) {
+  const value = normalizeQuery(text)
+  if (!value) return 0
+
+  let score = 0
+  if (phrase && value === phrase) score += exactWeight
+  if (phrase && value.includes(phrase)) score += includeWeight
+
+  for (const token of tokens) {
+    if (value.includes(token)) score += tokenWeight
+  }
+  return score
+}
+
+function relevanceScore(job, query) {
+  const phrase = normalizeQuery(query)
+  const tokens = queryTokens(phrase)
+  if (!phrase || tokens.length === 0) return 0
+
+  let score = 0
+  score += scoreField(job.title, phrase, tokens, 500, 220, 70)
+  score += scoreField(job.company, phrase, tokens, 260, 120, 45)
+  score += scoreField(job.category, phrase, tokens, 180, 90, 35)
+  score += scoreField(job.location, phrase, tokens, 150, 80, 30)
+  score += scoreField(job.description, phrase, tokens, 0, 40, 12)
+  score += scoreField(job.source, phrase, tokens, 0, 35, 10)
+  return score
+}
+
+function compareByPostedNewest(a, b) {
+  return parsePostedDate(b.posted) - parsePostedDate(a.posted)
+}
+
+function compareExternalSort(a, b, sortBy) {
+  if (sortBy === 'newest') return compareByPostedNewest(a, b)
+  if (sortBy === 'oldest') return parsePostedDate(a.posted) - parsePostedDate(b.posted)
+  if (sortBy === 'source') return (a.source || '').localeCompare(b.source || '')
+  if (sortBy === 'title') return (a.title || '').localeCompare(b.title || '')
+  return 0
+}
+
+function dedupeJobs(jobs) {
+  const seen = new Set()
+  const unique = []
+  for (const job of jobs) {
+    const key = [
+      normalizeQuery(job.title),
+      normalizeQuery(job.company),
+      normalizeQuery(job.source),
+      normalizeQuery(job.url),
+    ].join('|')
+    if (seen.has(key)) continue
+    seen.add(key)
+    unique.push(job)
+  }
+  return unique
+}
+
+function pageItems(items, page, perPage) {
+  const start = (page - 1) * perPage
+  return items.slice(start, start + perPage)
+}
+
+function getPageRange(current, total, width = 5) {
+  if (total <= width) return Array.from({ length: total }, (_, i) => i + 1)
+  const half = Math.floor(width / 2)
+  let start = Math.max(1, current - half)
+  let end = start + width - 1
+  if (end > total) {
+    end = total
+    start = end - width + 1
+  }
+  return Array.from({ length: end - start + 1 }, (_, i) => start + i)
+}
 
 function SourceBadge({ source, color }) {
   return (
@@ -129,6 +219,16 @@ export default function BrowseJobs() {
   const [extSearch, setExtSearch] = useState('')
   const [extSort, setExtSort] = useState('newest')
   const [extKeyword, setExtKeyword] = useState('') // last keyword used for API fetch
+  const [forYouPage, setForYouPage] = useState(1)
+  const [allJobsPage, setAllJobsPage] = useState(1)
+  const [extPage, setExtPage] = useState(1)
+  const [extPerPage, setExtPerPage] = useState(PAGE_SIZE)
+  const [extTotal, setExtTotal] = useState(0)
+  const [extProvidersConfigured, setExtProvidersConfigured] = useState(true)
+  const [extError, setExtError] = useState('')
+  const [jobKeyword, setJobKeyword] = useState(normalizeQuery(companyParam))
+  const bannerSearchValue = tab === 2 ? extSearch : search
+  const firstInternalSearchRun = useRef(true)
 
   function toggleJobType(type) {
     setJobTypes(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type])
@@ -142,33 +242,83 @@ export default function BrowseJobs() {
 
   const fetchJobs = useCallback(() => {
     setLoading(true)
+    const normalizedKeyword = normalizeQuery(search)
     const params = { status: 'Open' }
-    if (search) params.search = search
+    if (normalizedKeyword) params.search = normalizedKeyword
     if (location) params.location = location
     api.get('/jobs', { params }).then(r => {
       setAllJobs(r.data.jobs || [])
+      setJobKeyword(normalizedKeyword)
     }).catch(() => {}).finally(() => setLoading(false))
   }, [search, location])
 
   useEffect(() => { fetchJobs() }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (firstInternalSearchRun.current) {
+      firstInternalSearchRun.current = false
+      return
+    }
+    const timer = setTimeout(() => {
+      fetchJobs()
+    }, 350)
+    return () => clearTimeout(timer)
+  }, [search, location, fetchJobs])
+
   function clearCompanyFilter() {
     setSearch('')
+    setJobKeyword('')
     setSearchParams({})
   }
 
+  function handleBannerSearchChange(value) {
+    if (tab === 2) {
+      setExtSearch(value)
+      return
+    }
+    setSearch(value)
+  }
+
+  function runBannerSearch() {
+    if (tab === 2) {
+      fetchExternalJobs(extSearch.trim(), 1)
+      return
+    }
+    fetchJobs()
+  }
+
   // Fetch external jobs — accepts optional keyword for backend re-search
-  const fetchExternalJobs = useCallback((kw = '') => {
+  const fetchExternalJobs = useCallback((kw = '', page = 1) => {
     setExtLoading(true)
-    const params = kw ? { keyword: kw } : {}
+    setExtError('')
+    const params = { page, per_page: PAGE_SIZE, real_only: 1 }
+    if (kw) params.keyword = kw
     api.get('/jobs/external', { params }).then(r => {
-      const jobs = (r.data.jobs || []).sort((a, b) => a.title.localeCompare(b.title))
+      const jobs = r.data.jobs || []
       setExternalJobs(jobs)
       setExtKeyword(kw)
-    }).catch(() => {}).finally(() => setExtLoading(false))
+      setExtPage(r.data.page || page)
+      setExtPerPage(r.data.per_page || PAGE_SIZE)
+      setExtTotal(r.data.total || 0)
+      setExtProvidersConfigured(r.data.providers_configured !== false)
+    }).catch((err) => {
+      if (err?.response?.status === 429) {
+        setExtError('External job API rate limit reached. Please wait a bit before searching again.')
+      } else {
+        setExtError('Failed to fetch live external jobs. Please try again.')
+      }
+    }).finally(() => setExtLoading(false))
   }, [])
 
-  useEffect(() => { fetchExternalJobs() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchExternalJobs('', 1) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    setForYouPage(1)
+  }, [search, jobs, externalJobs])
+
+  useEffect(() => {
+    setAllJobsPage(1)
+  }, [search, location, jobTypes, jobs, externalJobs])
 
   // Fetch saved job IDs
   useEffect(() => {
@@ -189,11 +339,23 @@ export default function BrowseJobs() {
     }
   }
 
-  // For You = only course-matched jobs (backend already filters by course)
-  const recommendedJobs = [
+  const forYouQuery = normalizeQuery(search)
+
+  // For You = course-matched jobs from internal + external, deduped and relevance-sorted
+  const recommendedJobs = dedupeJobs([
     ...jobs.filter(j => j.recommended),
     ...externalJobs.filter(j => j.recommended),
-  ]
+  ])
+    .filter(j => !forYouQuery || relevanceScore(j, forYouQuery) > 0)
+    .sort((a, b) => {
+      if (forYouQuery) {
+        const diff = relevanceScore(b, forYouQuery) - relevanceScore(a, forYouQuery)
+        if (diff !== 0) return diff
+      }
+      const byDate = compareByPostedNewest(a, b)
+      if (byDate !== 0) return byDate
+      return (a.title || '').localeCompare(b.title || '')
+    })
 
   // External jobs with search + sort applied (client-side over loaded results)
   const filteredExternal = externalJobs
@@ -208,21 +370,43 @@ export default function BrowseJobs() {
              (j.description || '').toLowerCase().includes(q)
     })
     .sort((a, b) => {
-      if (extSort === 'newest') return new Date(b.posted || 0) - new Date(a.posted || 0)
-      if (extSort === 'oldest') return new Date(a.posted || 0) - new Date(b.posted || 0)
-      if (extSort === 'source') return (a.source || '').localeCompare(b.source || '')
-      if (extSort === 'title') return a.title.localeCompare(b.title)
-      return 0
+      const activeExternalQuery = normalizeQuery(extSearch || extKeyword)
+      if (activeExternalQuery) {
+        const diff = relevanceScore(b, activeExternalQuery) - relevanceScore(a, activeExternalQuery)
+        if (diff !== 0) return diff
+      }
+      const bySelectedSort = compareExternalSort(a, b, extSort)
+      if (bySelectedSort !== 0) return bySelectedSort
+      return (a.title || '').localeCompare(b.title || '')
     })
 
-  // All Jobs: only course-matched jobs, sorted by recommended first
-  const sortedAllJobs = [...jobs]
-    .filter(j => j.recommended)
-    .sort((a, b) => (b.recommended ? 1 : 0) - (a.recommended ? 1 : 0))
+  // All Jobs: merged internal + external jobs, deduped and relevance-sorted
+  const sortedAllJobs = dedupeJobs([...jobs, ...externalJobs])
+    .filter(j => !jobKeyword || relevanceScore(j, jobKeyword) > 0)
+    .filter(j => jobTypes.length === 0 || jobTypes.includes(j.type))
+    .sort((a, b) => {
+      const diff = relevanceScore(b, jobKeyword) - relevanceScore(a, jobKeyword)
+      if (diff !== 0) return diff
+      const byRecommended = (b.recommended ? 1 : 0) - (a.recommended ? 1 : 0)
+      if (byRecommended !== 0) return byRecommended
+      const byDate = compareByPostedNewest(a, b)
+      if (byDate !== 0) return byDate
+      return (a.title || '').localeCompare(b.title || '')
+    })
 
-  const displayJobs = tab === 0 ? recommendedJobs : tab === 1 ? sortedAllJobs : filteredExternal
+  const forYouTotalPages = Math.max(1, Math.ceil(recommendedJobs.length / PAGE_SIZE))
+  const allJobsTotalPages = Math.max(1, Math.ceil(sortedAllJobs.length / PAGE_SIZE))
+  const externalTotalPages = Math.max(1, Math.ceil(extTotal / Math.max(1, extPerPage)))
+
+  const pagedForYouJobs = pageItems(recommendedJobs, forYouPage, PAGE_SIZE)
+  const pagedAllJobs = pageItems(sortedAllJobs, allJobsPage, PAGE_SIZE)
+
+  const displayJobs = tab === 0 ? pagedForYouJobs : tab === 1 ? pagedAllJobs : filteredExternal
   const isExternal = tab === 2
   const isLoading = tab === 2 ? extLoading : loading
+  const currentPage = tab === 0 ? forYouPage : tab === 1 ? allJobsPage : extPage
+  const totalPages = tab === 0 ? forYouTotalPages : tab === 1 ? allJobsTotalPages : externalTotalPages
+  const pageRange = getPageRange(currentPage, totalPages)
 
   return (
     <AlumniLayout>
@@ -254,8 +438,8 @@ export default function BrowseJobs() {
             <div className="flex-1 relative">
               <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg" />
               <input type="text" placeholder="Job title, keyword, or company"
-                value={search} onChange={e => setSearch(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && (tab === 2 ? fetchExternalJobs(search.trim()) : fetchJobs())}
+                value={bannerSearchValue} onChange={e => handleBannerSearchChange(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && runBannerSearch()}
                 className="w-full pl-10 pr-3 py-2.5 rounded-xl text-sm bg-white focus:outline-none" />
             </div>
             <div className="relative sm:w-[200px]">
@@ -266,7 +450,7 @@ export default function BrowseJobs() {
                 className="w-full pl-10 pr-3 py-2.5 rounded-xl text-sm bg-white focus:outline-none" />
             </div>
             <button
-              onClick={() => tab === 2 ? fetchExternalJobs(search.trim()) : fetchJobs()}
+              onClick={runBannerSearch}
               className="px-6 py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-90"
               style={{ background: '#52b788', color: '#fff' }}>
               Search
@@ -340,7 +524,7 @@ export default function BrowseJobs() {
             )}
             {tab === 1 && (
               <p className="text-sm text-gray-500">
-                <span className="font-semibold text-gray-900">{sortedAllJobs.length}</span> jobs matched to <span className="font-semibold" style={{ color: '#2d6a4f' }}>{course || 'your profile'}</span>
+                <span className="font-semibold text-gray-900">{sortedAllJobs.length}</span> open jobs available
               </p>
             )}
             {tab === 2 && (
@@ -349,7 +533,7 @@ export default function BrowseJobs() {
                   <div>
                     <p className="text-sm text-gray-500">
                       <span className="font-semibold text-gray-900">{filteredExternal.length}</span>
-                      {extSearch && filteredExternal.length !== externalJobs.length ? ` of ${externalJobs.length}` : ''} live listings
+                      {extTotal > 0 ? ` of ${extTotal}` : ''} live listings
                     </p>
                     <p className="text-xs text-gray-400 mt-0.5">
                       {extKeyword ? `Results for "${extKeyword}"` : `Recommended for ${course || 'your profile'}`}
@@ -362,15 +546,15 @@ export default function BrowseJobs() {
                     <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
                     <input
                       type="text"
-                      placeholder="Search jobs (press Enter to fetch new results)"
+                      placeholder="Search jobs"
                       value={extSearch}
                       onChange={e => setExtSearch(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && fetchExternalJobs(extSearch.trim())}
+                      onKeyDown={e => e.key === 'Enter' && fetchExternalJobs(extSearch.trim(), 1)}
                       className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs border border-gray-200 focus:outline-none focus:border-green-400 bg-white"
                     />
                   </div>
                   <button
-                    onClick={() => fetchExternalJobs(extSearch.trim())}
+                    onClick={() => fetchExternalJobs(extSearch.trim(), 1)}
                     className="px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all hover:opacity-90 flex-shrink-0"
                     style={{ background: '#2d6a4f' }}
                   >
@@ -387,6 +571,9 @@ export default function BrowseJobs() {
                     <option value="source">By source</option>
                   </select>
                 </div>
+                {extError && (
+                  <p className="text-xs text-amber-700 mt-2">{extError}</p>
+                )}
               </div>
             )}
           </div>
@@ -401,7 +588,13 @@ export default function BrowseJobs() {
             <div className="bg-white rounded-2xl py-16 text-center" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
               <MdWork className="text-3xl text-gray-300 mx-auto mb-2" />
               <p className="text-sm text-gray-400">
-                {tab === 0 ? 'No program-matched jobs found' : 'No jobs found'}
+                {tab === 0
+                  ? 'No program-matched jobs found'
+                  : tab === 2
+                    ? (extProvidersConfigured
+                      ? 'No live jobs found for this search'
+                      : 'No live providers configured. Add API keys in backend/.env to fetch direct listing links.')
+                    : 'No jobs found'}
               </p>
             </div>
           )}
@@ -413,10 +606,55 @@ export default function BrowseJobs() {
               job={job}
               isSaved={savedIds.has(job.id)}
               onSave={toggleSave}
-              showSource={tab === 0 || tab === 2}
-              external={isExternal || (tab === 0 && job.id?.toString().startsWith('ext-'))}
+              showSource={tab === 0 || tab === 1 || tab === 2}
+              external={isExternal || job.id?.toString().startsWith('ext-')}
             />
           ))}
+
+          {!isLoading && totalPages > 1 && (
+            <div className="pt-2 flex items-center gap-1.5 flex-wrap">
+              <button
+                onClick={() => {
+                  if (currentPage <= 1) return
+                  if (tab === 0) setForYouPage(currentPage - 1)
+                  if (tab === 1) setAllJobsPage(currentPage - 1)
+                  if (tab === 2) fetchExternalJobs(extKeyword, currentPage - 1)
+                }}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-200 disabled:opacity-40"
+              >
+                Prev
+              </button>
+              {pageRange.map(pageNum => (
+                <button
+                  key={pageNum}
+                  onClick={() => {
+                    if (tab === 0) setForYouPage(pageNum)
+                    if (tab === 1) setAllJobsPage(pageNum)
+                    if (tab === 2) fetchExternalJobs(extKeyword, pageNum)
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors"
+                  style={pageNum === currentPage
+                    ? { background: '#2d6a4f', color: '#fff', borderColor: '#2d6a4f' }
+                    : { background: '#fff', color: '#4b5563', borderColor: '#e5e7eb' }}
+                >
+                  {pageNum}
+                </button>
+              ))}
+              <button
+                onClick={() => {
+                  if (currentPage >= totalPages) return
+                  if (tab === 0) setForYouPage(currentPage + 1)
+                  if (tab === 1) setAllJobsPage(currentPage + 1)
+                  if (tab === 2) fetchExternalJobs(extKeyword, currentPage + 1)
+                }}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-200 disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </AlumniLayout>
