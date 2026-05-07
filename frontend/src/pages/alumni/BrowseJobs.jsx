@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+﻿import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import AlumniLayout from '../../components/alumni/AlumniLayout'
 import {
@@ -9,7 +9,7 @@ import api from '../../services/api'
 import { useAuth } from '../../context/AuthContext'
 
 const typeStyle = {
-  'Full-time':  { background: '#f0faf5', color: '#2d6a4f' },
+  'Full-time':  { background: '#e6ede8', color: '#0f2d1a' },
   'Part-time':  { background: '#eff6ff', color: '#2563eb' },
   'Contract':   { background: '#fff7ed', color: '#ea580c' },
   'Internship': { background: '#fdf4ff', color: '#9333ea' },
@@ -120,11 +120,11 @@ function JobCard({ job, isSaved, onSave, showSource = false, external = false })
   const [expanded, setExpanded] = useState(false)
   return (
     <div className="bg-white rounded-2xl overflow-hidden transition-all"
-      style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: job.recommended ? '1.5px solid #b7e4c7' : '1.5px solid transparent' }}>
+      style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: job.recommended ? '1.5px solid #d4e4d8' : '1.5px solid transparent' }}>
       <div className="p-4 flex items-start gap-4">
         {/* Avatar */}
         <div className="w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-          style={{ background: job.color || job.source_color || '#2d6a4f' }}>
+          style={{ background: job.color || job.source_color || '#0f2d1a' }}>
           {job.company[0]}
         </div>
 
@@ -135,19 +135,19 @@ function JobCard({ job, isSaved, onSave, showSource = false, external = false })
                 <h3 className="text-sm font-bold text-gray-900 leading-tight">{job.title}</h3>
                 {job.recommended && (
                   <span className="flex items-center gap-0.5 text-xs font-bold px-1.5 py-0.5 rounded-full flex-shrink-0"
-                    style={{ background: '#f0faf5', color: '#2d6a4f', fontSize: '10px' }}>
+                    style={{ background: '#e6ede8', color: '#0f2d1a', fontSize: '10px' }}>
                     <MdStar className="text-xs" /> Match
                   </span>
                 )}
               </div>
-              <p className="text-xs font-medium mt-0.5" style={{ color: '#2d6a4f' }}>{job.company}</p>
+              <p className="text-xs font-medium mt-0.5" style={{ color: '#0f2d1a' }}>{job.company}</p>
             </div>
 
             {/* Actions */}
             <div className="flex items-center gap-2 flex-shrink-0">
               {!external && (
                 <button onClick={() => onSave(job)} className="transition-colors"
-                  style={{ color: isSaved ? '#2d6a4f' : '#d1d5db' }}>
+                  style={{ color: isSaved ? '#0f2d1a' : '#d1d5db' }}>
                   {isSaved ? <MdBookmark className="text-lg" /> : <MdBookmarkBorder className="text-lg" />}
                 </button>
               )}
@@ -156,7 +156,7 @@ function JobCard({ job, isSaved, onSave, showSource = false, external = false })
                 <button
                   onClick={e => { e.stopPropagation(); window.open(job.url, '_blank', 'noopener,noreferrer'); }}
                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all hover:opacity-90 flex-shrink-0"
-                  style={{ background: '#2d6a4f' }}>
+                  style={{ background: '#0f2d1a' }}>
                   Apply Now <MdOpenInNew style={{ fontSize: '11px' }} />
                 </button>
               )}
@@ -185,7 +185,7 @@ function JobCard({ job, isSaved, onSave, showSource = false, external = false })
           {job.description && (
             <button onClick={() => setExpanded(p => !p)}
               className="mt-2 flex items-center gap-0.5 text-xs font-semibold transition-colors"
-              style={{ color: '#2d6a4f' }}>
+              style={{ color: '#0f2d1a' }}>
               {expanded ? <><MdExpandLess /> Hide details</> : <><MdExpandMore /> View details</>}
             </button>
           )}
@@ -411,7 +411,7 @@ export default function BrowseJobs() {
   return (
     <AlumniLayout>
       {/* Search banner */}
-      <div className="py-8 px-4 sm:px-6 relative overflow-hidden" style={{ background: '#2d6a4f' }}>
+      <div className="py-8 px-4 sm:px-6 relative overflow-hidden" style={{ background: '#0f2d1a' }}>
         <div className="absolute inset-0 pointer-events-none"
           style={{ backgroundImage: 'radial-gradient(circle at 80% 50%, rgba(82,183,136,0.15) 0%, transparent 60%)' }} />
         <div className="relative px-6">
@@ -452,7 +452,7 @@ export default function BrowseJobs() {
             <button
               onClick={runBannerSearch}
               className="px-6 py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-90"
-              style={{ background: '#52b788', color: '#fff' }}>
+              style={{ background: '#1a3d27', color: '#fff' }}>
               Search
             </button>
           </div>
@@ -465,14 +465,14 @@ export default function BrowseJobs() {
           {TABS.map((t, i) => (
             <button key={t} onClick={() => setTab(i)}
               className="px-4 py-2 text-sm font-semibold transition-all relative"
-              style={{ color: tab === i ? '#2d6a4f' : '#9ca3af' }}>
+              style={{ color: tab === i ? '#0f2d1a' : '#9ca3af' }}>
               {t}
               {i === 0 && recommendedJobs.length > 0 && (
                 <span className="ml-1.5 text-xs font-black px-1.5 py-0.5 rounded-full"
-                  style={{ background: '#f0faf5', color: '#2d6a4f' }}>{recommendedJobs.length}</span>
+                  style={{ background: '#e6ede8', color: '#0f2d1a' }}>{recommendedJobs.length}</span>
               )}
               {tab === i && (
-                <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full" style={{ background: '#2d6a4f' }} />
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full" style={{ background: '#0f2d1a' }} />
               )}
             </button>
           ))}
@@ -487,11 +487,11 @@ export default function BrowseJobs() {
             <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
               <h3 className="text-sm font-bold text-gray-900 mb-4">Filters</h3>
               <div className="mb-4">
-                <p className="text-xs font-semibold mb-2.5 uppercase tracking-wider" style={{ color: '#2d6a4f' }}>Job Type</p>
+                <p className="text-xs font-semibold mb-2.5 uppercase tracking-wider" style={{ color: '#0f2d1a' }}>Job Type</p>
                 {['Full-time', 'Part-time', 'Contract', 'Internship'].map(type => (
                   <label key={type} className="flex items-center gap-2.5 mb-2.5 cursor-pointer">
                     <div className="w-4 h-4 rounded flex items-center justify-center border transition-all flex-shrink-0"
-                      style={{ background: jobTypes.includes(type) ? '#2d6a4f' : 'white', borderColor: jobTypes.includes(type) ? '#2d6a4f' : '#d1d5db' }}
+                      style={{ background: jobTypes.includes(type) ? '#0f2d1a' : 'white', borderColor: jobTypes.includes(type) ? '#0f2d1a' : '#d1d5db' }}
                       onClick={() => toggleJobType(type)}>
                       {jobTypes.includes(type) && (
                         <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 10 10">
@@ -519,7 +519,7 @@ export default function BrowseJobs() {
           <div className="flex items-center justify-between mb-1">
             {tab === 0 && (
               <p className="text-sm text-gray-500">
-                <span className="font-semibold text-gray-900">{recommendedJobs.length}</span> jobs matched to <span className="font-semibold" style={{ color: '#2d6a4f' }}>{course || 'your profile'}</span>
+                <span className="font-semibold text-gray-900">{recommendedJobs.length}</span> jobs matched to <span className="font-semibold" style={{ color: '#0f2d1a' }}>{course || 'your profile'}</span>
               </p>
             )}
             {tab === 1 && (
@@ -556,7 +556,7 @@ export default function BrowseJobs() {
                   <button
                     onClick={() => fetchExternalJobs(extSearch.trim(), 1)}
                     className="px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all hover:opacity-90 flex-shrink-0"
-                    style={{ background: '#2d6a4f' }}
+                    style={{ background: '#0f2d1a' }}
                   >
                     Search
                   </button>
@@ -635,7 +635,7 @@ export default function BrowseJobs() {
                   }}
                   className="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors"
                   style={pageNum === currentPage
-                    ? { background: '#2d6a4f', color: '#fff', borderColor: '#2d6a4f' }
+                    ? { background: '#0f2d1a', color: '#fff', borderColor: '#0f2d1a' }
                     : { background: '#fff', color: '#4b5563', borderColor: '#e5e7eb' }}
                 >
                   {pageNum}

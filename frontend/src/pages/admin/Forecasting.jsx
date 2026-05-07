@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -18,7 +18,7 @@ const CustomTooltip = ({ active, payload, label }) => {
   return (
     <div className="bg-white rounded-xl px-4 py-3 text-xs shadow-lg border border-gray-100">
       <p className="font-bold text-gray-700 mb-1">{label}</p>
-      <p style={{ color: isForecast ? '#52b788' : '#2d6a4f' }}>
+      <p style={{ color: isForecast ? '#1a3d27' : '#0f2d1a' }}>
         {isForecast ? 'Forecast: ' : 'Actual: '}
         <span className="font-bold">{payload[0].value}%</span>
       </p>
@@ -79,7 +79,7 @@ export default function Forecasting() {
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right"><p className="text-xs font-semibold text-gray-700">Admin</p><p className="text-xs text-gray-400">Administrator</p></div>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-black" style={{ background: '#2d6a4f' }}>A</div>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-black" style={{ background: '#0f2d1a' }}>A</div>
           </div>
         </div>
 
@@ -94,32 +94,29 @@ export default function Forecasting() {
           </div>
           <div className="flex flex-col sm:flex-row gap-4 items-end">
             <div className="flex-1">
-              <label className="block text-xs font-semibold mb-1.5" style={{ color: '#2d6a4f' }}>Forecast Horizon</label>
+              <label className="block text-xs font-semibold mb-1.5" style={{ color: '#0f2d1a' }}>Forecast Horizon</label>
               <div className="flex gap-2">
                 {years.map((y, i) => (
                   <button key={y} onClick={() => setHorizon(i)}
                     className="flex-1 py-2 text-xs font-semibold rounded-xl border transition-all"
-                    style={horizon === i ? { background: '#2d6a4f', color: '#fff', borderColor: '#2d6a4f' } : { color: '#6b7280', borderColor: '#e5e7eb' }}>
+                    style={horizon === i ? { background: '#0f2d1a', color: '#fff', borderColor: '#0f2d1a' } : { color: '#6b7280', borderColor: '#e5e7eb' }}>
                     {y}
                   </button>
                 ))}
               </div>
             </div>
             <div className="flex-1">
-              <label className="block text-xs font-semibold mb-1.5" style={{ color: '#2d6a4f' }}>Model</label>
+              <label className="block text-xs font-semibold mb-1.5" style={{ color: '#0f2d1a' }}>Model</label>
               <select value={model} onChange={e => setModel(e.target.value)}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 bg-gray-50 focus:outline-none">
                 <option>Linear Regression</option>
                 <option>Random Forest</option>
                 <option>Auto ARIMA (AIC search)</option>
-                <option>ARIMA (p=2, d=1, q=2)</option>
-                <option>ARIMA (p=1, d=1, q=1)</option>
-                <option>ARIMA (p=3, d=1, q=1)</option>
               </select>
             </div>
             <button onClick={runForecast} disabled={running}
               className="px-6 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 disabled:opacity-60 flex items-center gap-2"
-              style={{ background: '#2d6a4f' }}>
+              style={{ background: '#0f2d1a' }}>
               {running ? (
                 <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="white" strokeWidth="4" />
@@ -140,7 +137,7 @@ export default function Forecasting() {
                 <p className="text-xs text-gray-400 mt-0.5">Historical + projected trend</p>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: '#f0faf5', color: '#2d6a4f' }}>Live Data</span>
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: '#e6ede8', color: '#0f2d1a' }}>Live Data</span>
                 <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: '#eef2ff', color: '#4338ca' }}>
                   {modelUsed}
                 </span>
@@ -150,8 +147,8 @@ export default function Forecasting() {
               <AreaChart data={displayData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="fg" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2d6a4f" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#2d6a4f" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#0f2d1a" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#0f2d1a" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
@@ -159,13 +156,13 @@ export default function Forecasting() {
                 <YAxis domain={[40, 90]} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} />
                 <Tooltip content={<CustomTooltip />} />
                 {firstForecastYear && (
-                  <ReferenceLine x={firstForecastYear} stroke="#d1fae5" strokeDasharray="5 4"
-                    label={{ value: 'Forecast →', position: 'top', fontSize: 10, fill: '#52b788' }} />
+                  <ReferenceLine x={firstForecastYear} stroke="#d4e4d8" strokeDasharray="5 4"
+                    label={{ value: 'Forecast →', position: 'top', fontSize: 10, fill: '#1a3d27' }} />
                 )}
-                <Area type="monotone" dataKey="rate" stroke="#2d6a4f" strokeWidth={2.5} fill="url(#fg)"
+                <Area type="monotone" dataKey="rate" stroke="#0f2d1a" strokeWidth={2.5} fill="url(#fg)"
                   dot={({ cx, cy, payload }) => payload.forecast
-                    ? <circle key={cx} cx={cx} cy={cy} r={5} fill="#52b788" stroke="#fff" strokeWidth={2} />
-                    : <circle key={cx} cx={cx} cy={cy} r={4} fill="#2d6a4f" stroke="#fff" strokeWidth={2} />}
+                    ? <circle key={cx} cx={cx} cy={cy} r={5} fill="#1a3d27" stroke="#fff" strokeWidth={2} />
+                    : <circle key={cx} cx={cx} cy={cy} r={4} fill="#0f2d1a" stroke="#fff" strokeWidth={2} />}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -175,13 +172,13 @@ export default function Forecasting() {
           <div className="w-full lg:w-64 space-y-4">
             <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
               <h3 className="text-xs font-bold text-gray-900 mb-3 flex items-center gap-1.5">
-                <MdTrendingUp style={{ color: '#2d6a4f' }} /> Projected Values
+                <MdTrendingUp style={{ color: '#0f2d1a' }} /> Projected Values
               </h3>
               <div className="space-y-2.5">
                 {projected.map(r => (
                   <div key={r.year} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
                     <span className="text-xs text-gray-500">{r.year} Forecast</span>
-                    <span className="text-xs font-bold" style={{ color: '#2d6a4f' }}>{r.val}</span>
+                    <span className="text-xs font-bold" style={{ color: '#0f2d1a' }}>{r.val}</span>
                   </div>
                 ))}
               </div>
@@ -200,7 +197,7 @@ export default function Forecasting() {
                   <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 9, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} />
                   <YAxis type="category" dataKey="course" tick={{ fontSize: 10, fill: '#6b7280' }} axisLine={false} tickLine={false} width={40} />
                   <Tooltip formatter={v => `${v}%`} />
-                  <Bar dataKey="rate" fill="#2d6a4f" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="rate" fill="#0f2d1a" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

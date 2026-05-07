@@ -109,9 +109,9 @@ class EmployabilityPredictor:
 
         if loaded_any:
             loaded_names = [k.upper() for k in MODEL_KEYS if self.models.get(k) is not None]
-            print(f"✅ ML models loaded into predictor: {', '.join(loaded_names)}")
+            print(f"[OK] ML models loaded into predictor: {', '.join(loaded_names)}")
         else:
-            print("⚠️ Models not found. Please run the training script first.")
+            print("[WARNING] Models not found. Please run the training script first.")
 
     def _resolve_model(self, requested_model: str = 'rf'):
         requested = (requested_model or 'rf').strip().lower()

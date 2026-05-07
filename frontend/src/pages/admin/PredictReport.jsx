@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout'
 import { MdAssessment, MdDownload, MdCheckCircle, MdPictureAsPdf, MdTableChart } from 'react-icons/md'
 import api from '../../services/api'
@@ -60,7 +60,7 @@ export default function PredictReport() {
               <p className="text-xs font-semibold text-gray-700">Admin</p>
               <p className="text-xs text-gray-400">Administrator</p>
             </div>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-black" style={{ background: '#2d6a4f' }}>A</div>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-black" style={{ background: '#0f2d1a' }}>A</div>
           </div>
         </div>
 
@@ -72,13 +72,13 @@ export default function PredictReport() {
               <h2 className="text-sm font-bold text-gray-900 mb-4">Generate New Report</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
                 <div>
-                  <label className="block text-xs font-semibold mb-1.5" style={{ color: '#2d6a4f' }}>Report Type</label>
+                  <label className="block text-xs font-semibold mb-1.5" style={{ color: '#0f2d1a' }}>Report Type</label>
                   <div className="flex gap-2">
                     {['PDF', 'Excel'].map(t => (
                       <button key={t} onClick={() => setReportType(t)}
                         className="flex-1 py-2 text-xs font-semibold rounded-xl border transition-all flex items-center justify-center gap-1.5"
                         style={reportType === t
-                          ? { background: '#2d6a4f', color: '#fff', borderColor: '#2d6a4f' }
+                          ? { background: '#0f2d1a', color: '#fff', borderColor: '#0f2d1a' }
                           : { color: '#6b7280', borderColor: '#e5e7eb' }}>
                         {t === 'PDF' ? <MdPictureAsPdf className="text-sm" /> : <MdTableChart className="text-sm" />}
                         {t}
@@ -87,7 +87,7 @@ export default function PredictReport() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold mb-1.5" style={{ color: '#2d6a4f' }}>Year Range</label>
+                  <label className="block text-xs font-semibold mb-1.5" style={{ color: '#0f2d1a' }}>Year Range</label>
                   <select value={yearRange} onChange={e => setYearRange(e.target.value)}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 bg-gray-50 focus:outline-none">
                     <option>2019–2024</option>
@@ -97,7 +97,7 @@ export default function PredictReport() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold mb-1.5" style={{ color: '#2d6a4f' }}>Include Sections</label>
+                  <label className="block text-xs font-semibold mb-1.5" style={{ color: '#0f2d1a' }}>Include Sections</label>
                   <select className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 bg-gray-50 focus:outline-none">
                     <option>All Sections</option>
                     <option>Forecast Only</option>
@@ -105,7 +105,7 @@ export default function PredictReport() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold mb-1.5" style={{ color: '#2d6a4f' }}>Model</label>
+                  <label className="block text-xs font-semibold mb-1.5" style={{ color: '#0f2d1a' }}>Model</label>
                   <select value={model} onChange={e => setModel(e.target.value)}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 bg-gray-50 focus:outline-none">
                     <option>Linear Regression</option>
@@ -119,7 +119,7 @@ export default function PredictReport() {
               </div>
               <button onClick={generate} disabled={generating}
                 className="w-full py-3 rounded-xl text-white text-sm font-bold transition-all hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2"
-                style={{ background: '#2d6a4f' }}>
+                style={{ background: '#0f2d1a' }}>
                 {generating ? (
                   <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="white" strokeWidth="4" /><path className="opacity-75" fill="white" d="M4 12a8 8 0 018-8v8z" /></svg> Generating…</>
                 ) : generated ? (
@@ -135,8 +135,8 @@ export default function PredictReport() {
               <h2 className="text-sm font-bold text-gray-900 mb-4">Model Accuracy Metrics</h2>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {metricsList.map(m => (
-                  <div key={m.label} className="text-center p-4 rounded-xl" style={{ background: '#f0faf5' }}>
-                    <p className="text-xl font-black" style={{ color: '#2d6a4f' }}>{m.value}</p>
+                  <div key={m.label} className="text-center p-4 rounded-xl" style={{ background: '#e6ede8' }}>
+                    <p className="text-xl font-black" style={{ color: '#0f2d1a' }}>{m.value}</p>
                     <p className="text-xs font-bold text-gray-700 mt-1">{m.label}</p>
                     <p className="text-xs text-gray-400 mt-0.5">{m.desc}</p>
                   </div>
@@ -163,10 +163,10 @@ export default function PredictReport() {
                 {reports.map(r => (
                   <div key={r.id} className="flex items-center gap-3 py-2.5 border-b border-gray-50 last:border-0">
                     <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{ background: r.type === 'PDF' ? '#fef2f2' : '#f0faf5' }}>
+                      style={{ background: r.type === 'PDF' ? '#fef2f2' : '#e6ede8' }}>
                       {r.type === 'PDF'
                         ? <MdPictureAsPdf className="text-sm" style={{ color: '#ef4444' }} />
-                        : <MdTableChart className="text-sm" style={{ color: '#2d6a4f' }} />}
+                        : <MdTableChart className="text-sm" style={{ color: '#0f2d1a' }} />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold text-gray-700 truncate">{r.name}</p>

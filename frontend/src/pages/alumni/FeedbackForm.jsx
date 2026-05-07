@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AlumniLayout from '../../components/alumni/AlumniLayout'
 import { MdCheckCircle } from 'react-icons/md'
@@ -43,8 +43,8 @@ export default function FeedbackForm() {
     return (
       <AlumniLayout>
         <div className="px-4 sm:px-6 py-16 flex flex-col items-center page-enter">
-          <div className="w-20 h-20 rounded-2xl flex items-center justify-center mb-5" style={{ background: '#f0faf5' }}>
-            <MdCheckCircle className="text-5xl" style={{ color: '#2d6a4f' }} />
+          <div className="w-20 h-20 rounded-2xl flex items-center justify-center mb-5" style={{ background: '#e6ede8' }}>
+            <MdCheckCircle className="text-5xl" style={{ color: '#0f2d1a' }} />
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">Feedback Submitted!</h2>
           <p className="text-sm text-gray-400 mb-8 text-center max-w-sm">
@@ -53,7 +53,7 @@ export default function FeedbackForm() {
           <button
             onClick={() => navigate('/alumni/dashboard')}
             className="px-8 py-3 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90"
-            style={{ background: '#2d6a4f' }}
+            style={{ background: '#0f2d1a' }}
           >
             Back to Dashboard
           </button>
@@ -91,9 +91,9 @@ export default function FeedbackForm() {
                     <input type="radio" name="status" value={opt.value} checked={status === opt.value}
                       onChange={() => setStatus(opt.value)} className="hidden" />
                     <span className="text-xl">{opt.icon}</span>
-                    <span className="text-xs font-bold" style={{ color: status === opt.value ? '#2d6a4f' : '#374151' }}>{opt.label}</span>
+                    <span className="text-xs font-bold" style={{ color: status === opt.value ? '#0f2d1a' : '#374151' }}>{opt.label}</span>
                     <span className="text-xs text-gray-400 leading-relaxed">{opt.desc}</span>
-                    {status === opt.value && <MdCheckCircle className="text-base mt-1 self-end" style={{ color: '#2d6a4f' }} />}
+                    {status === opt.value && <MdCheckCircle className="text-base mt-1 self-end" style={{ color: '#0f2d1a' }} />}
                   </label>
                 ))}
               </div>
@@ -109,18 +109,18 @@ export default function FeedbackForm() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                 <div>
-                  <label className={labelCls} style={{ color: '#2d6a4f' }}>Company Name</label>
+                  <label className={labelCls} style={{ color: '#0f2d1a' }}>Company Name</label>
                   <input name="company" placeholder="e.g. Jollibee Foods Corp." value={form.company} onChange={handleChange} className={input} />
                 </div>
                 <div>
-                  <label className={labelCls} style={{ color: '#2d6a4f' }}>Job Position</label>
+                  <label className={labelCls} style={{ color: '#0f2d1a' }}>Job Position</label>
                   <input name="position" placeholder="e.g. Software Engineer" value={form.position} onChange={handleChange} className={input} />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className={labelCls} style={{ color: '#2d6a4f' }}>Duration</label>
+                  <label className={labelCls} style={{ color: '#0f2d1a' }}>Duration</label>
                   <select name="duration" value={form.duration} onChange={handleChange} className={select}>
                     <option value="">Select duration</option>
                     <option>Less than 1 year</option><option>1–2 years</option>
@@ -128,14 +128,14 @@ export default function FeedbackForm() {
                   </select>
                 </div>
                 <div>
-                  <label className={labelCls} style={{ color: '#2d6a4f' }}>Work Setup</label>
+                  <label className={labelCls} style={{ color: '#0f2d1a' }}>Work Setup</label>
                   <select name="workSetup" value={form.workSetup} onChange={handleChange} className={select}>
                     <option value="">Select setup</option>
                     <option>On-site</option><option>Remote</option><option>Hybrid</option>
                   </select>
                 </div>
                 <div>
-                  <label className={labelCls} style={{ color: '#2d6a4f' }}>Employment Type</label>
+                  <label className={labelCls} style={{ color: '#0f2d1a' }}>Employment Type</label>
                   <select name="employmentType" value={form.employmentType} onChange={handleChange} className={select}>
                     <option value="">Select type</option>
                     <option>Full-time</option><option>Part-time</option>
@@ -152,7 +152,7 @@ export default function FeedbackForm() {
               </button>
               <button type="submit" disabled={submitting}
                 className="px-6 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 hover:scale-[1.02] disabled:opacity-60"
-                style={{ background: '#2d6a4f' }}>
+                style={{ background: '#0f2d1a' }}>
                 {submitting ? 'Submitting…' : 'Submit Feedback'}
               </button>
             </div>

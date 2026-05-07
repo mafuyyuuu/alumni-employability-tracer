@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout'
 import { MdSave, MdRefresh, MdToggleOn, MdToggleOff, MdAutoFixHigh } from 'react-icons/md'
 import api from '../../services/api'
@@ -85,7 +85,7 @@ export default function VoterConfig() {
               <p className="text-xs font-semibold text-gray-700">Admin</p>
               <p className="text-xs text-gray-400">Administrator</p>
             </div>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-black" style={{ background: '#2d6a4f' }}>A</div>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-black" style={{ background: '#0f2d1a' }}>A</div>
           </div>
         </div>
 
@@ -105,7 +105,7 @@ export default function VoterConfig() {
                 <button
                   onClick={() => { setUseVoterWeights(prev => !prev); setSaved(false) }}
                   className="text-3xl transition-colors"
-                  style={{ color: useVoterWeights ? '#2d6a4f' : '#d1d5db' }}
+                  style={{ color: useVoterWeights ? '#0f2d1a' : '#d1d5db' }}
                   title="Toggle prediction mode"
                 >
                   {useVoterWeights ? <MdToggleOn /> : <MdToggleOff />}
@@ -117,8 +117,8 @@ export default function VoterConfig() {
               <h2 className="text-sm font-bold text-gray-900">Prediction Factors</h2>
               <span className="text-xs font-semibold px-2.5 py-1 rounded-full"
                 style={{
-                  background: totalWeight === 100 || !useVoterWeights ? '#f0faf5' : '#fff7ed',
-                  color: totalWeight === 100 || !useVoterWeights ? '#2d6a4f' : '#ea580c',
+                  background: totalWeight === 100 || !useVoterWeights ? '#e6ede8' : '#fff7ed',
+                  color: totalWeight === 100 || !useVoterWeights ? '#0f2d1a' : '#ea580c',
                 }}>
                 Total: {totalWeight}%{totalWeight !== 100 && useVoterWeights ? ' (should be 100%)' : ''}
               </span>
@@ -148,7 +148,7 @@ export default function VoterConfig() {
                 <div key={f.id} className="grid grid-cols-12 items-center p-3 rounded-xl transition-all"
                   style={{ background: f.enabled ? '#f9fafb' : '#fafafa', opacity: f.enabled ? 1 : 0.55 }}>
                   <div className="col-span-1">
-                    <button onClick={() => toggle(f.id)} className="text-2xl transition-colors" style={{ color: f.enabled ? '#2d6a4f' : '#d1d5db' }}>
+                    <button onClick={() => toggle(f.id)} className="text-2xl transition-colors" style={{ color: f.enabled ? '#0f2d1a' : '#d1d5db' }}>
                       {f.enabled ? <MdToggleOn /> : <MdToggleOff />}
                     </button>
                   </div>
@@ -162,7 +162,7 @@ export default function VoterConfig() {
                     <input type="number" min={0} max={100} value={f.weight} disabled={!f.enabled}
                       onChange={e => setWeight(f.id, e.target.value)}
                       className="w-16 text-right border border-gray-200 rounded-lg px-2 py-1 text-xs font-semibold text-gray-700 disabled:opacity-40 focus:outline-none focus:ring-1"
-                      style={{ '--tw-ring-color': '#2d6a4f' }} />
+                      style={{ '--tw-ring-color': '#0f2d1a' }} />
                   </div>
                 </div>
               ))}
@@ -183,7 +183,7 @@ export default function VoterConfig() {
               </button>
               <button onClick={save} disabled={saving}
                 className="px-6 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 disabled:opacity-60 flex items-center gap-2"
-                style={{ background: '#2d6a4f' }}>
+                style={{ background: '#0f2d1a' }}>
                 {saved ? <><span>✓</span> Saved!</> : <><MdSave /> Save Configuration</>}
               </button>
               </div>
@@ -206,8 +206,8 @@ export default function VoterConfig() {
                   <div key={f.id} className="flex items-center justify-between">
                     <span className="text-xs text-gray-600">{f.name}</span>
                     <div className="flex items-center gap-1.5">
-                      <div className="h-1.5 rounded-full" style={{ width: `${f.weight * 1.2}px`, background: '#2d6a4f', minWidth: 4 }} />
-                      <span className="text-xs font-bold" style={{ color: '#2d6a4f' }}>{f.weight}%</span>
+                      <div className="h-1.5 rounded-full" style={{ width: `${f.weight * 1.2}px`, background: '#0f2d1a', minWidth: 4 }} />
+                      <span className="text-xs font-bold" style={{ color: '#0f2d1a' }}>{f.weight}%</span>
                     </div>
                   </div>
                 ))}

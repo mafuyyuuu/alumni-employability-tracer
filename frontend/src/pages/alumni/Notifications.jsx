@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import AlumniLayout from '../../components/alumni/AlumniLayout'
 import { MdNotificationsNone, MdCheckCircle, MdDoneAll } from 'react-icons/md'
 import api from '../../services/api'
@@ -60,9 +60,9 @@ export default function Notifications() {
           >
             <div
               className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
-              style={{ background: 'linear-gradient(135deg,#f0faf5,#d8f3dc)' }}
+              style={{ background: '#e6ede8' }}
             >
-              <MdNotificationsNone className="text-3xl" style={{ color: '#52b788' }} />
+              <MdNotificationsNone className="text-3xl" style={{ color: '#1a3d27' }} />
             </div>
             <h3 className="text-base font-bold text-gray-800">All caught up!</h3>
             <p className="text-sm text-gray-400 mt-1.5 text-center max-w-xs">
@@ -79,15 +79,15 @@ export default function Notifications() {
                 className="bg-white rounded-2xl px-5 py-4 flex items-start gap-4 cursor-pointer hover:shadow-sm transition-all"
                 style={{
                   boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-                  borderLeft: n.is_read ? '3px solid transparent' : '3px solid #2d6a4f',
+                  borderLeft: n.is_read ? '3px solid transparent' : '3px solid #0f2d1a',
                 }}
                 onClick={() => !n.is_read && markRead(n.id)}
               >
                 <div
                   className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: n.is_read ? '#f3f4f6' : '#f0faf5' }}
+                  style={{ background: n.is_read ? '#f3f4f6' : '#e6ede8' }}
                 >
-                  <MdCheckCircle className="text-lg" style={{ color: n.is_read ? '#d1d5db' : '#2d6a4f' }} />
+                  <MdCheckCircle className="text-lg" style={{ color: n.is_read ? '#d1d5db' : '#0f2d1a' }} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className={`text-sm font-semibold ${n.is_read ? 'text-gray-500' : 'text-gray-900'}`}>
@@ -97,7 +97,7 @@ export default function Notifications() {
                   <p className="text-xs text-gray-300 mt-1">{n.created_at?.slice(0, 10)}</p>
                 </div>
                 {!n.is_read && (
-                  <div className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5" style={{ background: '#2d6a4f' }} />
+                  <div className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5" style={{ background: '#0f2d1a' }} />
                 )}
               </div>
             ))}

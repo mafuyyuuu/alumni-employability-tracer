@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import Sidebar from './Sidebar'
 import { MdMenu } from 'react-icons/md'
 
@@ -31,7 +31,7 @@ export default function AdminLayout({ children }) {
           </button>
           <div
             className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-black"
-            style={{ background: '#2d6a4f' }}
+            style={{ background: '#0f2d1a' }}
           >
             P
           </div>

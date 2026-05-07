@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout'
 import { MdAdd, MdSearch, MdEdit, MdDelete, MdBusiness } from 'react-icons/md'
 import api from '../../services/api'
@@ -51,7 +51,7 @@ export default function AdminCompanies() {
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right hidden sm:block"><p className="text-xs font-semibold text-gray-700">Admin</p><p className="text-xs text-gray-400">Administrator</p></div>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-black" style={{ background: '#2d6a4f' }}>A</div>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-black" style={{ background: '#0f2d1a' }}>A</div>
           </div>
         </div>
 
@@ -61,11 +61,11 @@ export default function AdminCompanies() {
             <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg" />
             <input type="text" placeholder="Search companies…" value={search} onChange={e => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2"
-              style={{ '--tw-ring-color': 'rgba(45,106,79,0.2)' }} />
+              style={{ '--tw-ring-color': 'rgba(15,45,26,0.2)' }} />
           </div>
           <button onClick={() => setShowForm(true)}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90"
-            style={{ background: '#2d6a4f' }}>
+            style={{ background: '#0f2d1a' }}>
             <MdAdd className="text-lg" /> Add Company
           </button>
         </div>
@@ -76,13 +76,13 @@ export default function AdminCompanies() {
             <h3 className="text-sm font-bold text-gray-900 mb-4">Add New Company</h3>
             <form onSubmit={addCompany} className="flex flex-col sm:flex-row gap-3">
               <input required placeholder="Company name" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-                className="flex-1 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2" style={{ '--tw-ring-color': 'rgba(45,106,79,0.2)' }} />
+                className="flex-1 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2" style={{ '--tw-ring-color': 'rgba(15,45,26,0.2)' }} />
               <input required placeholder="Industry" value={form.industry} onChange={e => setForm(p => ({ ...p, industry: e.target.value }))}
-                className="flex-1 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2" style={{ '--tw-ring-color': 'rgba(45,106,79,0.2)' }} />
+                className="flex-1 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2" style={{ '--tw-ring-color': 'rgba(15,45,26,0.2)' }} />
               <input required placeholder="Location" value={form.location} onChange={e => setForm(p => ({ ...p, location: e.target.value }))}
-                className="flex-1 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2" style={{ '--tw-ring-color': 'rgba(45,106,79,0.2)' }} />
+                className="flex-1 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2" style={{ '--tw-ring-color': 'rgba(15,45,26,0.2)' }} />
               <div className="flex gap-2">
-                <button type="submit" className="px-5 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: '#2d6a4f' }}>Save</button>
+                <button type="submit" className="px-5 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: '#0f2d1a' }}>Save</button>
                 <button type="button" onClick={() => setShowForm(false)} className="px-5 py-2.5 rounded-xl text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50">Cancel</button>
               </div>
             </form>
@@ -111,11 +111,11 @@ export default function AdminCompanies() {
               <span className="col-span-2 text-xs text-gray-500">{c.industry}</span>
               <span className="col-span-2 text-xs text-gray-500">{c.location}</span>
               <div className="col-span-2 text-center">
-                <span className="text-xs font-bold" style={{ color: c.openings > 0 ? '#2d6a4f' : '#9ca3af' }}>{c.openings}</span>
+                <span className="text-xs font-bold" style={{ color: c.openings > 0 ? '#0f2d1a' : '#9ca3af' }}>{c.openings}</span>
               </div>
               <div className="col-span-1 flex justify-center">
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                  style={c.status === 'Active' ? { background: '#f0faf5', color: '#2d6a4f' } : { background: '#f3f4f6', color: '#9ca3af' }}>
+                  style={c.status === 'Active' ? { background: '#e6ede8', color: '#0f2d1a' } : { background: '#f3f4f6', color: '#9ca3af' }}>
                   {c.status}
                 </span>
               </div>

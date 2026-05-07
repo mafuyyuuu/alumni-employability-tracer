@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AlumniLayout from '../../components/alumni/AlumniLayout'
 import { MdBookmarkBorder, MdArrowForward, MdLocationOn, MdWork, MdDelete } from 'react-icons/md'
 import api from '../../services/api'
 
 const typeStyle = {
-  'Full-time': { background: '#f0faf5', color: '#2d6a4f' },
+  'Full-time': { background: '#e6ede8', color: '#0f2d1a' },
   'Part-time': { background: '#eff6ff', color: '#2563eb' },
   'Contract':  { background: '#fff7ed', color: '#ea580c' },
 }
@@ -45,15 +45,15 @@ export default function SavedJobs() {
           <div className="flex-1 bg-white rounded-2xl flex flex-col items-center justify-center py-20 border border-dashed border-gray-200"
             style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}
           >
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: '#f0faf5' }}>
-              <MdBookmarkBorder className="text-3xl" style={{ color: '#b7e4c7' }} />
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: '#e6ede8' }}>
+              <MdBookmarkBorder className="text-3xl" style={{ color: '#d4e4d8' }} />
             </div>
             <h3 className="text-base font-bold text-gray-800">No saved jobs yet</h3>
             <p className="text-sm text-gray-400 mt-1 mb-5">Start bookmarking jobs you're interested in</p>
             <button
               onClick={() => navigate('/alumni/browse-jobs')}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 hover:scale-[1.02]"
-              style={{ background: '#2d6a4f' }}
+              style={{ background: '#0f2d1a' }}
             >
               Browse Jobs <MdArrowForward />
             </button>
@@ -76,7 +76,7 @@ export default function SavedJobs() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-sm font-bold text-gray-900">{job.title}</h3>
-                  <p className="text-xs font-medium mt-0.5" style={{ color: '#2d6a4f' }}>{job.company}</p>
+                  <p className="text-xs font-medium mt-0.5" style={{ color: '#0f2d1a' }}>{job.company}</p>
                   <div className="flex items-center flex-wrap gap-2 mt-2">
                     <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={typeStyle[job.type] || typeStyle['Full-time']}>
                       {job.type}

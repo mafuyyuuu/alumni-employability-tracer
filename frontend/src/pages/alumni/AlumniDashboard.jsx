@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AlumniLayout from '../../components/alumni/AlumniLayout'
 import { MdBookmark, MdNotifications, MdArrowForward, MdLocationOn, MdWork, MdTrendingUp, MdStar } from 'react-icons/md'
@@ -6,7 +6,7 @@ import api from '../../services/api'
 import { useAuth } from '../../context/AuthContext'
 
 const typeStyle = {
-  'Full-time': { background: '#f0faf5', color: '#2d6a4f' },
+  'Full-time': { background: '#e6ede8', color: '#0f2d1a' },
   'Part-time': { background: '#eff6ff', color: '#2563eb' },
   'Contract':  { background: '#fff7ed', color: '#ea580c' },
   'Internship':{ background: '#fdf4ff', color: '#9333ea' },
@@ -36,13 +36,13 @@ export default function AlumniDashboard() {
         {/* Welcome banner */}
         <div
           className="rounded-2xl p-6 mb-6 relative overflow-hidden"
-          style={{ background: '#2d6a4f' }}
+          style={{ background: '#0f2d1a' }}
         >
           <div
             className="absolute top-0 right-0 w-72 h-72 rounded-full pointer-events-none"
             style={{ background: 'radial-gradient(circle,rgba(183,228,199,0.15),transparent 70%)', transform: 'translate(25%,-25%)' }}
           />
-          <p className="text-xs font-semibold tracking-widest uppercase mb-1" style={{ color: '#b7e4c7' }}>
+          <p className="text-xs font-semibold tracking-widest uppercase mb-1" style={{ color: '#d4e4d8' }}>
             Welcome back
           </p>
           <h2 className="text-white text-2xl font-bold tracking-tight">Hello, {firstName}!</h2>
@@ -89,7 +89,7 @@ export default function AlumniDashboard() {
               <button
                 onClick={() => navigate('/alumni/browse-jobs')}
                 className="text-xs font-semibold flex items-center gap-1 hover:gap-2 transition-all"
-                style={{ color: '#2d6a4f' }}
+                style={{ color: '#0f2d1a' }}
               >
                 See all <MdArrowForward className="text-sm" />
               </button>
@@ -98,17 +98,17 @@ export default function AlumniDashboard() {
             {recommendedJobs.length === 0 ? (
               <div
                 className="rounded-xl flex flex-col items-center justify-center py-14"
-                style={{ background: '#f9fbfa', border: '1.5px dashed #b7e4c7' }}
+                style={{ background: '#f5f6f5', border: '1.5px dashed #d4e4d8' }}
               >
-                <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3" style={{ background: '#f0faf5' }}>
-                  <MdWork className="text-2xl" style={{ color: '#b7e4c7' }} />
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3" style={{ background: '#e6ede8' }}>
+                  <MdWork className="text-2xl" style={{ color: '#d4e4d8' }} />
                 </div>
                 <p className="text-sm font-semibold text-gray-500">No recommendations yet</p>
                 <p className="text-xs text-gray-400 mt-1">Complete your profile to get matched</p>
                 <button
                   onClick={() => navigate('/alumni/profile-settings')}
                   className="mt-4 text-xs font-semibold px-4 py-2 rounded-lg transition-colors hover:opacity-80"
-                  style={{ background: '#f0faf5', color: '#2d6a4f' }}
+                  style={{ background: '#e6ede8', color: '#0f2d1a' }}
                 >
                   Update Profile
                 </button>
@@ -120,7 +120,7 @@ export default function AlumniDashboard() {
                     key={job.id}
                     onClick={() => navigate('/alumni/browse-jobs')}
                     className="flex items-start gap-3 p-3 rounded-xl cursor-pointer transition-all hover:shadow-sm"
-                    style={{ border: '1.5px solid #b7e4c7', background: '#f9fbfa' }}
+                    style={{ border: '1.5px solid #d4e4d8', background: '#f5f6f5' }}
                   >
                     <div
                       className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
@@ -132,7 +132,7 @@ export default function AlumniDashboard() {
                       <div className="flex items-center gap-1.5">
                         <p className="text-xs font-semibold text-gray-900 truncate flex-1">{job.title}</p>
                         <span className="flex items-center gap-0.5 text-xs font-bold px-1.5 py-0.5 rounded-full flex-shrink-0"
-                          style={{ background: '#f0faf5', color: '#2d6a4f', fontSize: '9px' }}>
+                          style={{ background: '#e6ede8', color: '#0f2d1a', fontSize: '9px' }}>
                           <MdStar style={{ fontSize: '9px' }} /> Match
                         </span>
                       </div>
@@ -153,7 +153,7 @@ export default function AlumniDashboard() {
                 <button
                   onClick={() => navigate('/alumni/browse-jobs')}
                   className="w-full mt-2 py-2 rounded-xl text-xs font-semibold transition-colors hover:opacity-80"
-                  style={{ background: '#f0faf5', color: '#2d6a4f' }}
+                  style={{ background: '#e6ede8', color: '#0f2d1a' }}
                 >
                   View all matching jobs →
                 </button>
@@ -171,7 +171,7 @@ export default function AlumniDashboard() {
               <button
                 onClick={() => navigate('/alumni/browse-jobs?tab=1')}
                 className="text-xs font-semibold flex items-center gap-1"
-                style={{ color: '#2d6a4f' }}
+                style={{ color: '#0f2d1a' }}
               >
                 View all <MdArrowForward className="text-sm" />
               </button>
@@ -185,7 +185,7 @@ export default function AlumniDashboard() {
                   key={job.id}
                   onClick={() => navigate('/alumni/browse-jobs')}
                   className="flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer hover:shadow-sm"
-                  style={{ borderColor: job.recommended ? '#b7e4c7' : '#f3f4f6' }}
+                  style={{ borderColor: job.recommended ? '#d4e4d8' : '#f3f4f6' }}
                 >
                   <div
                     className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
@@ -197,7 +197,7 @@ export default function AlumniDashboard() {
                     <div className="flex items-center gap-1">
                       <p className="text-xs font-semibold text-gray-900 truncate flex-1">{job.title}</p>
                       {job.recommended && (
-                        <MdStar className="flex-shrink-0 text-xs" style={{ color: '#2d6a4f' }} />
+                        <MdStar className="flex-shrink-0 text-xs" style={{ color: '#0f2d1a' }} />
                       )}
                     </div>
                     <p className="text-xs text-gray-400 truncate">{job.company}</p>

@@ -47,7 +47,7 @@ def train_linear_employability(database_path: str | None = None) -> dict:
     accuracy = (sum(int(pred == actual) for pred, actual in zip(class_preds, y_test)) / len(y_test)) * 100
     mae = float(mean_absolute_error(y_test, clipped))
     r2 = float(r2_score(y_test, clipped))
-    print(f"✅ Training complete. Accuracy: {accuracy:.2f}%")
+    print(f"[OK] Training complete. Accuracy: {accuracy:.2f}%")
 
     os.makedirs(models_dir, exist_ok=True)
     feature_names = X.columns.tolist()
@@ -66,7 +66,7 @@ def train_linear_employability(database_path: str | None = None) -> dict:
     joblib.dump(feature_names, os.path.join(models_dir, 'lr_features.joblib'))
     joblib.dump(defaults, os.path.join(models_dir, 'lr_defaults.joblib'))
     joblib.dump(metadata, os.path.join(models_dir, 'lr_metadata.joblib'))
-    print(f"💾 Saved model artifacts to: {models_dir}")
+    print(f"[SAVED] Saved model artifacts to: {models_dir}")
     return metadata
 
 
@@ -74,5 +74,5 @@ if __name__ == "__main__":
     try:
         train_linear_employability()
     except ValueError as exc:
-        print(f"❌ {exc}")
+        print(f"[ERROR] {exc}")
         raise SystemExit(1)
