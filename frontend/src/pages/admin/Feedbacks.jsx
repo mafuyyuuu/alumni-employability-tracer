@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout'
 import { MdFeedback, MdSearch, MdCheckCircle, MdWork, MdPending } from 'react-icons/md'
 import api from '../../services/api'
 
 const statusStyle = {
-  'Hired via platform':  { background: '#f0faf5', color: '#2d6a4f', icon: MdCheckCircle },
-  'Found employment':    { background: '#eff6ff', color: '#2563eb', icon: MdWork },
+  'Hired via platform':  { background: '#e6ede8', color: '#0f2d1a', icon: MdCheckCircle },
+  'Found employment':    { background: '#d8ede3', color: '#1a3d27', icon: MdWork },
   'Still looking':       { background: '#fff7ed', color: '#ea580c', icon: MdPending },
 }
 
@@ -42,8 +42,8 @@ export default function Feedbacks() {
             <p className="text-sm text-gray-400 mt-0.5">Alumni employment feedback submissions</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="text-right hidden sm:block"><p className="text-xs font-semibold text-gray-700">Admin</p><p className="text-xs text-gray-400">Administrator</p></div>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-black" style={{ background: '#2d6a4f' }}>A</div>
+            
+            
           </div>
         </div>
 
@@ -72,13 +72,13 @@ export default function Feedbacks() {
             <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg" />
             <input type="text" placeholder="Search by name or course…" value={search} onChange={e => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2"
-              style={{ '--tw-ring-color': 'rgba(45,106,79,0.2)' }} />
+              style={{ '--tw-ring-color': 'rgba(15,45,26,0.2)' }} />
           </div>
           <div className="flex gap-1 p-1 bg-gray-100 rounded-xl overflow-x-auto">
             {['All', 'Hired via platform', 'Found employment', 'Still looking'].map(f => (
               <button key={f} onClick={() => setFilter(f)}
                 className="px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-all"
-                style={filter === f ? { background: '#2d6a4f', color: '#fff' } : { color: '#6b7280' }}>
+                style={filter === f ? { background: '#0f2d1a', color: '#fff' } : { color: '#6b7280' }}>
                 {f}
               </button>
             ))}
@@ -96,7 +96,7 @@ export default function Feedbacks() {
               <div key={f.id} className="bg-white rounded-2xl overflow-hidden transition-all" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
                 <button onClick={() => setExpanded(isOpen ? null : f.id)}
                   className="w-full flex items-center gap-4 px-5 py-4 text-left hover:bg-gray-50 transition-colors">
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-white text-xs font-bold" style={{ background: '#2d6a4f' }}>
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-white text-xs font-bold" style={{ background: '#0f2d1a' }}>
                     {f.name[0]}
                   </div>
                   <div className="flex-1 min-w-0">

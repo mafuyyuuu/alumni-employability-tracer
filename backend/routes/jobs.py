@@ -2,7 +2,80 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from database import get_db
 from functools import wraps
-from services.job_fetcher import get_external_jobs_for_course, is_job_recommended, SOURCE_COLORS, get_source_color
+
+BOARD_EXAM_PROGRAMS = {'BSCE', 'BSEE', 'BSME', 'BSECE', 'BSN', 'BSEd', 'BEEd', 'BSA', 'BSCPE'}
+
+# Maps job category labels → matching program codes
+CATEGORY_PROGRAM_MAP = {
+    'it & software':          ['BSCS', 'BSIT'],
+    'software':               ['BSCS', 'BSIT'],
+    'it & networks':          ['BSIT', 'BSCPE', 'BSECE'],
+    'networks':               ['BSIT', 'BSCPE', 'BSECE'],
+    'business & management':  ['BSBA', 'BSHM'],
+    'management':             ['BSBA', 'BSHM'],
+    'finance & accounting':   ['BSA', 'BSBA'],
+    'accounting':             ['BSA'],
+    'finance':                ['BSA', 'BSBA'],
+    'healthcare & nursing':   ['BSN'],
+    'nursing':                ['BSN'],
+    'healthcare':             ['BSN'],
+    'hospitality & tourism':  ['BSHM'],
+    'hospitality':            ['BSHM'],
+    'tourism':                ['BSHM'],
+    'food & beverage':        ['BSHM'],
+    'education':              ['BSEd', 'BEEd'],
+    'teaching':               ['BSEd', 'BEEd'],
+    'engineering':            ['BSCPE', 'BSECE', 'BSCE'],
+    'electronics':            ['BSECE', 'BSCPE'],
+    'civil engineering':      ['BSCE'],
+    'computer engineering':   ['BSCPE'],
+}
+
+# Title/description keyword fallbacks per program
+KEYWORD_MAP = {
+    'BSCS':  ['software', 'developer', 'web', 'data scientist', 'data analyst', 'programmer',
+               'backend', 'frontend', 'fullstack', 'full-stack', 'machine learning', 'ai engineer'],
+    'BSIT':  ['it support', 'tech support', 'network', 'helpdesk', 'systems admin',
+               'database admin', 'it admin', 'it officer', 'system analyst', 'it specialist'],
+    'BSBA':  ['business analyst', 'marketing', 'sales', 'hr officer', 'human resource',
+               'operations', 'business development', 'project manager'],
+    'BSA':   ['accountant', 'auditor', 'bookkeeper', 'cpa', 'tax', 'financial analyst',
+               'accounting', 'finance officer', 'accounts payable', 'accounts receivable'],
+    'BSHM':  ['hotel', 'hospitality', 'tourism', 'front desk', 'restaurant', 'food',
+               'housekeeping', 'banquet', 'events coordinator', 'guest service'],
+    'BSEd':  ['teacher', 'instructor', 'tutor', 'educator', 'academic', 'school',
+               'faculty', 'learning', 'curriculum', 'professor'],
+    'BEEd':  ['elementary teacher', 'primary teacher', 'grade school', 'kinder teacher',
+               'tutor', 'instructor', 'educator'],
+    'BSN':   ['nurse', 'nursing', 'healthcare', 'hospital', 'medical', 'clinical',
+               'patient care', 'ward nurse', 'staff nurse', 'company nurse', 'rn'],
+    'BSCE':  ['civil engineer', 'construction', 'infrastructure', 'structural', 'site engineer',
+               'project engineer', 'quantity surveyor'],
+    'BSECE': ['electronics engineer', 'ece', 'embedded', 'telecommunications', 'rf engineer',
+               'signal', 'communications engineer'],
+    'BSCPE': ['computer engineer', 'hardware', 'firmware', 'fpga', 'embedded systems',
+               'systems engineer', 'pcb', 'circuit design'],
+}
+
+
+def is_job_recommended(title, category, course):
+    course_upper = (course or '').upper().strip()
+    if not course_upper:
+        return False
+
+    # 1. Direct category-to-program match (most reliable)
+    cat_lower = (category or '').lower().strip()
+    for cat_key, programs in CATEGORY_PROGRAM_MAP.items():
+        if cat_key in cat_lower and course_upper in programs:
+            return True
+
+    # 2. Title keyword match for the specific program
+    title_lower = (title or '').lower()
+    keywords = KEYWORD_MAP.get(course_upper, [])
+    if any(kw in title_lower for kw in keywords):
+        return True
+
+    return False
 
 jobs_bp = Blueprint('jobs', __name__)
 
@@ -123,44 +196,22 @@ def unsave_job(job_id):
     return jsonify({'message': 'Job removed from saved'}), 200
 
 
-@jobs_bp.route('/external', methods=['GET'])
-@jwt_required()
-def list_external_jobs():
-    """Fetch jobs from external sources (Adzuna API or curated mock data) filtered by program."""
-    user_id = get_jwt_identity()
-    db = get_db()
-    user = db.execute('SELECT course FROM users WHERE id = ?', [user_id]).fetchone()
-    course = request.args.get('course', user['course'] if user else '') or ''
-    search_keyword = request.args.get('keyword', '').strip()
 
-    jobs = get_external_jobs_for_course(course, search_keyword=search_keyword)
-
-    # Add source color and sequential IDs for frontend keys
-    result = []
-    for i, j in enumerate(jobs):
-        result.append({
-            'id': f"ext-{i}",
-            'title': j.get('title', ''),
-            'company': j.get('company', ''),
-            'location': j.get('location', 'Philippines'),
-            'type': j.get('type', 'Full-time'),
-            'salary': j.get('salary', ''),
-            'description': j.get('description', ''),
-            'url': j.get('url', ''),
-            'source': j.get('source', 'External'),
-            'source_color': get_source_color(j.get('source', '')),
-            'category': j.get('category', ''),
-            'program': j.get('program', ''),
-            'posted': j.get('posted_at', ''),
-            'recommended': j.get('program', '') == course.upper() or
-                           (j.get('program', '') == '' and is_job_recommended(j.get('title', ''), j.get('category', ''), course)),
-        })
-
-    return jsonify({'jobs': result, 'course': course, 'total': len(result)}), 200
+def company_or_admin_required(fn):
+    @wraps(fn)
+    @jwt_required()
+    def wrapper(*args, **kwargs):
+        uid = get_jwt_identity()
+        db = get_db()
+        user = db.execute('SELECT role FROM users WHERE id = ?', [uid]).fetchone()
+        if not user or user['role'] not in ('admin', 'company'):
+            return jsonify({'error': 'Company or admin access required'}), 403
+        return fn(*args, **kwargs)
+    return wrapper
 
 
 @jobs_bp.route('', methods=['POST'])
-@admin_required
+@company_or_admin_required
 def create_job():
     data = request.get_json()
     db = get_db()

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AlumniLayout from '../../components/alumni/AlumniLayout'
 import { MdPerson, MdSchool } from 'react-icons/md'
@@ -48,7 +48,7 @@ export default function ProfileSettings() {
 
   const Field = ({ name, label: lbl, type = 'text', step }) => (
     <div>
-      <label className={label} style={{ color: '#2d6a4f' }}>{lbl}</label>
+      <label className={label} style={{ color: '#0f2d1a' }}>{lbl}</label>
       <input name={name} type={type} step={step} value={form[name]} onChange={handleChange} className={input} />
     </div>
   )
@@ -63,7 +63,7 @@ export default function ProfileSettings() {
 
         {/* Avatar section */}
         <div className="bg-white rounded-2xl p-5 mb-4 flex items-center gap-4" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-white text-2xl font-black flex-shrink-0" style={{ background: '#2d6a4f' }}>
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-white text-2xl font-black flex-shrink-0" style={{ background: '#0f2d1a' }}>
             {form.firstName?.[0] || '?'}
           </div>
           <div>
@@ -75,8 +75,8 @@ export default function ProfileSettings() {
         <div className="bg-white rounded-2xl p-6" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           {/* Personal Information */}
           <div className="flex items-center gap-2 mb-5">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: '#f0faf5' }}>
-              <MdPerson className="text-sm" style={{ color: '#2d6a4f' }} />
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: '#e6ede8' }}>
+              <MdPerson className="text-sm" style={{ color: '#0f2d1a' }} />
             </div>
             <h2 className="text-sm font-bold text-gray-900">Personal Information</h2>
           </div>
@@ -95,15 +95,15 @@ export default function ProfileSettings() {
 
           {/* Academic Information */}
           <div className="flex items-center gap-2 mb-5">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: '#f0faf5' }}>
-              <MdSchool className="text-sm" style={{ color: '#2d6a4f' }} />
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: '#e6ede8' }}>
+              <MdSchool className="text-sm" style={{ color: '#0f2d1a' }} />
             </div>
             <h2 className="text-sm font-bold text-gray-900">Academic Information</h2>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <div>
-              <label className={label} style={{ color: '#2d6a4f' }}>Degree Program</label>
+              <label className={label} style={{ color: '#0f2d1a' }}>Degree Program</label>
               <select name="degree" value={form.degree} onChange={handleChange} className={input}>
                 <option value="">Select your program</option>
                 <option value="BSCS">BSCS – Bachelor of Science in Computer Science</option>
@@ -138,7 +138,7 @@ export default function ProfileSettings() {
               onClick={handleSave}
               disabled={saving}
               className="px-6 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 hover:scale-[1.02] disabled:opacity-60"
-              style={{ background: '#2d6a4f' }}
+              style={{ background: '#0f2d1a' }}
             >
               {saving ? 'Saving…' : saved ? '✓ Saved!' : 'Save Changes'}
             </button>

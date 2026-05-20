@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { MdLogout, MdWork, MdMenu, MdClose } from 'react-icons/md'
 import { useAuth } from '../../context/AuthContext'
@@ -27,14 +27,14 @@ export default function Navbar() {
         <div className="flex items-center gap-2.5">
           <div
             className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ background: '#2d6a4f' }}
+            style={{ background: '#0f2d1a' }}
           >
             <MdWork className="text-white text-base" />
           </div>
           <span className="font-bold text-gray-900 text-sm tracking-tight">Job Placement</span>
           <span
             className="text-xs font-semibold px-2 py-0.5 rounded-full ml-0.5 hidden sm:inline"
-            style={{ background: '#f0faf5', color: '#2d6a4f' }}
+            style={{ background: '#e6ede8', color: '#0f2d1a' }}
           >
             PLP
           </span>
@@ -68,7 +68,7 @@ export default function Navbar() {
           >
             <div
               className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
-              style={{ background: '#2d6a4f' }}
+              style={{ background: '#0f2d1a' }}
             >
               {initial}
             </div>
@@ -122,7 +122,7 @@ export default function Navbar() {
             >
               <div
                 className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold"
-                style={{ background: '#2d6a4f' }}
+                style={{ background: '#0f2d1a' }}
               >
                 {initial}
               </div>

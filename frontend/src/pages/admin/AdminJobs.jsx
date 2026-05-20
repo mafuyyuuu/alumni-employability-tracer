@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout'
 import { MdAdd, MdSearch, MdEdit, MdDelete, MdWork } from 'react-icons/md'
 import api from '../../services/api'
 
 const typeStyle = {
-  'Full-time':  { background: '#f0faf5', color: '#2d6a4f' },
-  'Part-time':  { background: '#eff6ff', color: '#2563eb' },
+  'Full-time':  { background: '#e6ede8', color: '#0f2d1a' },
+  'Part-time':  { background: '#d8ede3', color: '#1a3d27' },
   'Contract':   { background: '#fff7ed', color: '#ea580c' },
-  'Internship': { background: '#fdf4ff', color: '#9333ea' },
+  'Internship': { background: '#f0fdf4', color: '#2d6a4f' },
 }
 
 export default function AdminJobs() {
@@ -32,7 +32,7 @@ export default function AdminJobs() {
   function addJob(e) {
     e.preventDefault()
     api.post('/jobs', form).then(r => {
-      setJobs(prev => [{ id: r.data.id, ...form, status: 'Open', posted: 'Today', color: '#2d6a4f' }, ...prev])
+      setJobs(prev => [{ id: r.data.id, ...form, status: 'Open', posted: 'Today', color: '#0f2d1a' }, ...prev])
       setForm({ title: '', company: '', type: 'Full-time', location: '', salary: '' })
       setShowForm(false)
     }).catch(() => alert('Failed to add job'))
@@ -55,8 +55,8 @@ export default function AdminJobs() {
             <p className="text-sm text-gray-400 mt-0.5">Manage all job listings on the platform</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="text-right hidden sm:block"><p className="text-xs font-semibold text-gray-700">Admin</p><p className="text-xs text-gray-400">Administrator</p></div>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-black" style={{ background: '#2d6a4f' }}>A</div>
+            
+            
           </div>
         </div>
 
@@ -66,11 +66,11 @@ export default function AdminJobs() {
             <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg" />
             <input type="text" placeholder="Search jobs…" value={search} onChange={e => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2"
-              style={{ '--tw-ring-color': 'rgba(45,106,79,0.2)' }} />
+              style={{ '--tw-ring-color': 'rgba(15,45,26,0.2)' }} />
           </div>
           <button onClick={() => setShowForm(true)}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90"
-            style={{ background: '#2d6a4f' }}>
+            style={{ background: '#0f2d1a' }}>
             <MdAdd className="text-lg" /> Add Job
           </button>
         </div>
@@ -81,19 +81,19 @@ export default function AdminJobs() {
             <h3 className="text-sm font-bold text-gray-900 mb-4">Add New Job</h3>
             <form onSubmit={addJob} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <input required placeholder="Job title" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
-                className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2" style={{ '--tw-ring-color': 'rgba(45,106,79,0.2)' }} />
+                className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2" style={{ '--tw-ring-color': 'rgba(15,45,26,0.2)' }} />
               <input required placeholder="Company" value={form.company} onChange={e => setForm(p => ({ ...p, company: e.target.value }))}
-                className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2" style={{ '--tw-ring-color': 'rgba(45,106,79,0.2)' }} />
+                className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2" style={{ '--tw-ring-color': 'rgba(15,45,26,0.2)' }} />
               <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}
                 className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-white focus:outline-none">
                 {['Full-time', 'Part-time', 'Contract', 'Internship'].map(t => <option key={t}>{t}</option>)}
               </select>
               <input required placeholder="Location" value={form.location} onChange={e => setForm(p => ({ ...p, location: e.target.value }))}
-                className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2" style={{ '--tw-ring-color': 'rgba(45,106,79,0.2)' }} />
+                className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2" style={{ '--tw-ring-color': 'rgba(15,45,26,0.2)' }} />
               <input placeholder="Salary range (e.g. ₱20k–35k)" value={form.salary} onChange={e => setForm(p => ({ ...p, salary: e.target.value }))}
-                className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2" style={{ '--tw-ring-color': 'rgba(45,106,79,0.2)' }} />
+                className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2" style={{ '--tw-ring-color': 'rgba(15,45,26,0.2)' }} />
               <div className="flex gap-2">
-                <button type="submit" className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: '#2d6a4f' }}>Save</button>
+                <button type="submit" className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: '#0f2d1a' }}>Save</button>
                 <button type="button" onClick={() => setShowForm(false)} className="flex-1 py-2.5 rounded-xl text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50">Cancel</button>
               </div>
             </form>
@@ -114,8 +114,8 @@ export default function AdminJobs() {
           {filtered.map(j => (
             <div key={j.id} className="grid grid-cols-12 items-center px-5 py-3.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
               <div className="col-span-3 flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#f0faf5' }}>
-                  <MdWork className="text-xs" style={{ color: '#2d6a4f' }} />
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#e6ede8' }}>
+                  <MdWork className="text-xs" style={{ color: '#0f2d1a' }} />
                 </div>
                 <span className="text-sm font-semibold text-gray-800 truncate">{j.title}</span>
               </div>
@@ -124,15 +124,15 @@ export default function AdminJobs() {
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={typeStyle[j.type] || typeStyle['Full-time']}>{j.type}</span>
               </div>
               <span className="col-span-2 text-xs text-gray-500">{j.location}</span>
-              <span className="col-span-1 text-xs text-gray-500">{j.salary || '—'}</span>
+              <span className="col-span-1 text-xs text-gray-500">{j.salary || 'N/A'}</span>
               <div className="col-span-1 flex justify-center">
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                  style={j.status === 'Open' ? { background: '#f0faf5', color: '#2d6a4f' } : { background: '#f3f4f6', color: '#9ca3af' }}>
+                  style={j.status === 'Open' ? { background: '#e6ede8', color: '#0f2d1a' } : { background: '#f3f4f6', color: '#9ca3af' }}>
                   {j.status}
                 </span>
               </div>
               <div className="col-span-1 flex justify-end gap-1">
-                <button className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors rounded-lg hover:bg-blue-50"><MdEdit className="text-sm" /></button>
+                <button className="p-1.5 text-gray-400 hover:text-green-700 transition-colors rounded-lg hover:bg-green-50"><MdEdit className="text-sm" /></button>
                 <button onClick={() => setDeleteId(j.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"><MdDelete className="text-sm" /></button>
               </div>
             </div>

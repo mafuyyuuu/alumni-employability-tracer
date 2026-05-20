@@ -1,8 +1,8 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+﻿import { NavLink, useNavigate } from 'react-router-dom'
 import {
   MdDashboard, MdSettings, MdShowChart, MdCompareArrows,
   MdAssessment, MdBusiness, MdWork, MdPeople,
-  MdFeedback, MdCloudUpload, MdLogout, MdClose,
+  MdFeedback, MdCloudUpload, MdLogout, MdClose, MdSchool,
 } from 'react-icons/md'
 
 const sections = [
@@ -24,6 +24,7 @@ const sections = [
     label: 'Management',
     items: [
       { label: 'Voter Config',      to: '/admin/voter-config', icon: MdSettings },
+      { label: 'Programs',          to: '/admin/programs',     icon: MdSchool },
       { label: 'Companies',         to: '/admin/companies',    icon: MdBusiness },
       { label: 'Jobs',              to: '/admin/jobs',         icon: MdWork },
       { label: 'Users',             to: '/admin/users',        icon: MdPeople },
@@ -41,24 +42,24 @@ export default function Sidebar({ isOpen, onClose }) {
       className={`
         fixed inset-y-0 left-0 z-40 flex flex-col border-r
         transition-transform duration-300 ease-in-out
-        md:static md:translate-x-0 md:z-auto
+        md:relative md:h-full md:translate-x-0 md:z-auto
         w-56 flex-shrink-0
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
       `}
-      style={{ backgroundColor: '#111c17', borderColor: 'rgba(255,255,255,0.06)', minHeight: '100vh' }}
+      style={{ backgroundColor: '#0f2d1a', borderColor: 'rgba(255,255,255,0.06)' }}
     >
       {/* Logo */}
       <div className="px-5 py-5 mb-1 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div
             className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-black text-sm flex-shrink-0"
-            style={{ background: '#2d6a4f' }}
+            style={{ background: '#C8A217' }}
           >
             P
           </div>
           <div>
             <p className="text-white font-bold text-sm leading-none">PLP Admin</p>
-            <p className="text-xs mt-0.5" style={{ color: '#52b788' }}>Management Panel</p>
+            <p className="text-xs mt-0.5" style={{ color: '#C8A217' }}>Management Panel</p>
           </div>
         </div>
         {/* Close button — mobile only */}
@@ -70,51 +71,53 @@ export default function Sidebar({ isOpen, onClose }) {
         </button>
       </div>
 
-      {/* Nav sections */}
-      <nav className="flex-1 px-3 space-y-5 overflow-y-auto pb-4">
-        {sections.map((section) => (
-          <div key={section.label}>
-            <p
-              className="text-xs font-semibold uppercase tracking-widest px-2 mb-1.5"
-              style={{ color: 'rgba(255,255,255,0.28)' }}
-            >
-              {section.label}
-            </p>
-            {section.items.map(({ label, to, icon: Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                onClick={onClose}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 mb-0.5 ${
-                    isActive
-                      ? 'text-white'
-                      : 'text-gray-400 hover:text-white hover:bg-white/5'
-                  }`
-                }
-                style={({ isActive }) =>
-                  isActive
-                    ? { background: '#2d6a4f', boxShadow: '0 2px 8px rgba(45,106,79,0.4)' }
-                    : {}
-                }
+      {/* Nav — scrollable */}
+      <div className="flex-1 pl-3 pr-4 py-2">
+        <nav className="space-y-5">
+          {sections.map((section) => (
+            <div key={section.label}>
+              <p
+                className="text-xs font-semibold uppercase tracking-widest px-2 mb-1.5"
+                style={{ color: 'rgba(255,255,255,0.28)' }}
               >
-                <Icon className="text-base flex-shrink-0" />
-                <span className="text-xs">{label}</span>
-              </NavLink>
-            ))}
-          </div>
-        ))}
-      </nav>
+                {section.label}
+              </p>
+              {section.items.map(({ label, to, icon: Icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  onClick={onClose}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 pl-3 pr-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 mb-0.5 ${
+                      isActive
+                        ? 'text-white'
+                        : 'text-gray-400 hover:text-white hover:bg-white/5'
+                    }`
+                  }
+                  style={({ isActive }) =>
+                    isActive
+                      ? { background: '#1a3d27', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }
+                      : {}
+                  }
+                >
+                  <Icon className="text-base flex-shrink-0" />
+                  <span className="text-xs">{label}</span>
+                </NavLink>
+              ))}
+            </div>
+          ))}
+        </nav>
+      </div>
 
-      {/* Admin info + logout */}
+      {/* Admin info + logout — always pinned to bottom */}
       <div
-        className="px-4 py-4 border-t mx-3 mb-3 rounded-xl"
-        style={{ borderColor: 'rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)' }}
+        className="px-3 py-3 mx-3 mb-3 rounded-xl flex-shrink-0"
+        style={{ borderTop: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)' }}
       >
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-2.5">
           <div
             className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-            style={{ background: '#2d6a4f' }}
+            style={{ background: 'rgba(255,255,255,0.12)' }}
           >
             A
           </div>

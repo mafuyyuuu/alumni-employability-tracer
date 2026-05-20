@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AlumniLayout from '../../components/alumni/AlumniLayout'
 import { MdArrowForward, MdBusiness } from 'react-icons/md'
@@ -39,7 +39,7 @@ export default function Companies() {
                 {company.openings > 0 && (
                   <span
                     className="text-xs font-semibold px-2.5 py-1 rounded-full"
-                    style={{ background: '#f0faf5', color: '#2d6a4f' }}
+                    style={{ background: '#e6ede8', color: '#0f2d1a' }}
                   >
                     {company.openings} open
                   </span>
@@ -52,7 +52,7 @@ export default function Companies() {
               <button
                 onClick={() => navigate(`/alumni/browse-jobs?company=${encodeURIComponent(company.name)}`)}
                 className="flex items-center gap-1.5 text-xs font-semibold mt-4 transition-all group-hover:gap-2"
-                style={{ color: '#2d6a4f' }}
+                style={{ color: '#0f2d1a' }}
               >
                 View Jobs <MdArrowForward className="text-sm" />
               </button>

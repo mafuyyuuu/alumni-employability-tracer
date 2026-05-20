@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MdEmail, MdLock, MdVisibility, MdVisibilityOff, MdArrowBack, MdCheckCircle } from 'react-icons/md'
 import LiquidEther from '../components/LiquidEther'
@@ -27,6 +27,10 @@ export default function Login() {
       const user = await login(email, password)
       if (user.role === 'admin') {
         navigate('/admin/dashboard')
+      } else if (user.role === 'company') {
+        navigate('/company/dashboard')
+      } else if (user.ncae_completed === false) {
+        navigate('/alumni/ncae')
       } else {
         navigate('/alumni/dashboard')
       }
@@ -49,7 +53,7 @@ export default function Login() {
   const inputBase =
     'w-full bg-gray-50 border border-gray-200 rounded-xl px-11 py-3 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-transparent transition-all duration-200'
   const inputFocus =
-    'focus:bg-white focus:ring-2 focus:ring-[#2d6a4f]/30 focus:border-[#2d6a4f]'
+    'focus:bg-white focus:ring-2 focus:ring-[#0f2d1a]/30 focus:border-[#0f2d1a]'
 
   return (
     <div className="min-h-screen flex items-center justify-center overflow-hidden relative" style={{ background: '#060f06' }}>
@@ -117,7 +121,7 @@ export default function Login() {
                       type="button"
                       onClick={() => { setView('forgot'); setResetEmail(email) }}
                       className="text-xs font-semibold transition-colors hover:underline"
-                      style={{ color: '#2d6a4f' }}
+                      style={{ color: '#0f2d1a' }}
                     >
                       Forgot password?
                     </button>
@@ -150,7 +154,7 @@ export default function Login() {
                   type="submit"
                   disabled={loading}
                   className="w-full py-3.5 rounded-xl text-white text-sm font-bold tracking-wide disabled:opacity-60 transition-all duration-200 active:scale-[0.98] hover:opacity-90 mt-2"
-                  style={{ background: '#2d6a4f' }}
+                  style={{ background: '#0f2d1a' }}
                 >
                   {loading ? (
                     <span className="flex items-center justify-center gap-2">
@@ -169,7 +173,7 @@ export default function Login() {
                   Admin demo:{' '}
                   <span
                     className="font-semibold cursor-pointer hover:underline"
-                    style={{ color: '#2d6a4f' }}
+                    style={{ color: '#0f2d1a' }}
                     onClick={() => setEmail('admin@plp.edu.ph')}
                   >
                     admin@plp.edu.ph
@@ -202,7 +206,7 @@ export default function Login() {
                   type="submit"
                   disabled={loading}
                   className="w-full py-3.5 rounded-xl text-white text-sm font-bold tracking-wide disabled:opacity-60 active:scale-[0.98] transition-all hover:opacity-90"
-                  style={{ background: '#2d6a4f' }}
+                  style={{ background: '#0f2d1a' }}
                 >
                   {loading ? (
                     <span className="flex items-center justify-center gap-2">
@@ -232,16 +236,16 @@ export default function Login() {
               <div className="flex justify-center mb-6">
                 <div
                   className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                  style={{ background: '#f0faf5' }}
+                  style={{ background: '#e6ede8' }}
                 >
-                  <MdCheckCircle className="text-4xl" style={{ color: '#2d6a4f' }} />
+                  <MdCheckCircle className="text-4xl" style={{ color: '#0f2d1a' }} />
                 </div>
               </div>
 
               <button
                 onClick={() => { setView('login'); setResetEmail('') }}
                 className="w-full py-3.5 rounded-xl text-white text-sm font-bold tracking-wide active:scale-[0.98] transition-all hover:opacity-90"
-                style={{ background: '#2d6a4f' }}
+                style={{ background: '#0f2d1a' }}
               >
                 Back to Sign In
               </button>
@@ -249,7 +253,7 @@ export default function Login() {
               <button
                 onClick={() => setView('forgot')}
                 className="mt-4 text-xs font-semibold w-full text-center transition-colors hover:underline"
-                style={{ color: '#2d6a4f' }}
+                style={{ color: '#0f2d1a' }}
               >
                 Didn't receive it? Try again
               </button>

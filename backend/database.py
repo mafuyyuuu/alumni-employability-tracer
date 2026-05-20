@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS users (
     ojt_grade REAL DEFAULT 0,
     soft_skills REAL DEFAULT 0,
     hard_skills REAL DEFAULT 0,
+    board_passer INTEGER DEFAULT 0,
+    board_exam_score REAL DEFAULT 0,
+    company_id INTEGER DEFAULT NULL,
     created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -124,6 +127,47 @@ CREATE TABLE IF NOT EXISTS voter_config (
     weight INTEGER DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS prediction_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    use_voter_weights INTEGER DEFAULT 0,
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS ml_training_rows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_name TEXT NOT NULL,
+    source_row_id TEXT NOT NULL,
+    course TEXT NOT NULL,
+    graduation_year INTEGER NOT NULL,
+    age INTEGER NOT NULL,
+    avg_grade REAL NOT NULL,
+    avg_prof_grade REAL NOT NULL,
+    avg_elec_grade REAL NOT NULL,
+    ojt_grade REAL NOT NULL,
+    soft_skills REAL NOT NULL,
+    hard_skills REAL NOT NULL,
+    board_passer INTEGER DEFAULT 0,
+    board_exam_score REAL DEFAULT 0,
+    employed INTEGER NOT NULL,
+    is_active INTEGER DEFAULT 1,
+    imported_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(source_name, source_row_id)
+);
+
+CREATE TABLE IF NOT EXISTS programs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    code TEXT DEFAULT '',
+    has_board_exam INTEGER DEFAULT 0,
+    board_exam_name TEXT DEFAULT '',
+    description TEXT DEFAULT '',
+    status TEXT DEFAULT 'Active',
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_ml_training_rows_active
+ON ml_training_rows (is_active, source_name);
+
 CREATE TABLE IF NOT EXISTS reports (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -141,7 +185,35 @@ CREATE TABLE IF NOT EXISTS model_uploads (
     file_size INTEGER DEFAULT 0,
     records INTEGER DEFAULT 0,
     status TEXT DEFAULT 'Active',
+    sha256 TEXT DEFAULT '',
+    applied_to_training INTEGER DEFAULT 0,
     uploaded_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS ncae_questions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    program TEXT NOT NULL,
+    question_num INTEGER NOT NULL,
+    question TEXT NOT NULL,
+    option_a TEXT NOT NULL,
+    option_b TEXT NOT NULL,
+    option_c TEXT NOT NULL,
+    option_d TEXT NOT NULL,
+    correct_answer TEXT NOT NULL,
+    category TEXT NOT NULL,
+    UNIQUE(program, question_num)
+);
+
+CREATE TABLE IF NOT EXISTS ncae_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL UNIQUE,
+    program TEXT NOT NULL,
+    hard_skills_score REAL DEFAULT 0,
+    soft_skills_score REAL DEFAULT 0,
+    specific_skills_score REAL DEFAULT 0,
+    total_score REAL DEFAULT 0,
+    answers TEXT DEFAULT '',
+    completed_at TEXT DEFAULT (datetime('now'))
 );
 """
 
@@ -166,6 +238,14 @@ def init_db():
     # Migrations for existing DBs
     migrations = [
         "ALTER TABLE jobs ADD COLUMN category TEXT DEFAULT ''",
+        "ALTER TABLE model_uploads ADD COLUMN sha256 TEXT DEFAULT ''",
+        "ALTER TABLE model_uploads ADD COLUMN applied_to_training INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN board_passer INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN board_exam_score REAL DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN company_id INTEGER DEFAULT NULL",
+        "ALTER TABLE ml_training_rows ADD COLUMN board_passer INTEGER DEFAULT 0",
+        "ALTER TABLE ml_training_rows ADD COLUMN board_exam_score REAL DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN ncae_completed INTEGER DEFAULT 0",
     ]
     for m in migrations:
         try:

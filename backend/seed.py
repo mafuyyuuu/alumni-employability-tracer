@@ -133,7 +133,6 @@ def seed():
         (2020, 52.1, 54.0, 50.0, 2605, 2395),
         (2021, 61.4, 63.0, 59.0, 3070, 1930),
         (2022, 65.8, 67.0, 64.0, 3290, 1710),
-        (2023, 69.6, 71.0, 68.0, 3480, 1520),
     ]
 
     c.execute("SELECT COUNT(*) FROM employment_data")
@@ -175,6 +174,13 @@ def seed():
         c.executemany("""
             INSERT INTO voter_config (field_key, field_name, enabled, weight) VALUES (?,?,?,?)
         """, voter_fields)
+
+    # ── Prediction settings ─────────────────────────────────────────────
+    c.execute("SELECT COUNT(*) FROM prediction_settings")
+    if c.fetchone()[0] == 0:
+        c.execute("""
+            INSERT INTO prediction_settings (id, use_voter_weights) VALUES (1, 0)
+        """)
 
     # ── Reports ───────────────────────────────────────────────────────
     reps = [
@@ -246,6 +252,68 @@ def seed():
                 INSERT INTO feedbacks (user_id, employment_status, company, position, duration, work_setup, employment_type)
                 VALUES (?,?,?,?,?,?,?)
             """, feedback_data)
+
+    # ── Voter config: add board_passer if missing ─────────────────────
+    c.execute("SELECT id FROM voter_config WHERE field_key = 'board_passer'")
+    if not c.fetchone():
+        c.execute("""
+            INSERT INTO voter_config (field_key, field_name, enabled, weight)
+            VALUES ('board_passer', 'Board/Licensure Passer', 1, 10)
+        """)
+
+    # ── Company accounts ──────────────────────────────────────────────
+    c.execute("SELECT id FROM companies WHERE name = 'Accenture PH'")
+    accenture = c.fetchone()
+    company_id = accenture[0] if accenture else None
+
+    c.execute("SELECT id FROM users WHERE email = 'company@accenture.ph'")
+    if not c.fetchone():
+        c.execute("""
+            INSERT INTO users (first_name, last_name, email, password_hash,
+                role, account_status, company_id)
+            VALUES (?,?,?,?,'company','Active',?)
+        """, ['Recruiter', 'Accenture', 'company@accenture.ph',
+              hash_pw('company123'), company_id])
+
+    # ── Programs (initial seed) ────────────────────────────────────────
+    default_programs = [
+        ('Bachelor of Science in Computer Science', 'BSCS', 0, '', ''),
+        ('Bachelor of Science in Information Technology', 'BSIT', 0, '', ''),
+        ('Bachelor of Science in Computer Engineering', 'BSCPE', 1, 'Electronics Engineering Licensure Exam', 'Combines hardware and software engineering.'),
+        ('Bachelor of Science in Electronics Engineering', 'BSECE', 1, 'Electronics Engineering Licensure Exam', ''),
+        ('Bachelor of Science in Civil Engineering', 'BSCE', 1, 'Civil Engineering Licensure Exam', ''),
+        ('Bachelor of Science in Nursing', 'BSN', 1, 'Nurse Licensure Examination', ''),
+        ('Bachelor of Secondary Education', 'BSEd', 1, 'Licensure Examination for Teachers', ''),
+        ('Bachelor of Elementary Education', 'BEEd', 1, 'Licensure Examination for Teachers', ''),
+        ('Bachelor of Science in Accountancy', 'BSA', 1, 'CPA Licensure Examination', ''),
+        ('Bachelor of Science in Business Administration', 'BSBA', 0, '', ''),
+        ('Bachelor of Science in Hotel and Restaurant Management', 'BSHM', 0, '', ''),
+    ]
+
+    for prog in default_programs:
+        c.execute("SELECT id FROM programs WHERE name = ?", [prog[0]])
+        if not c.fetchone():
+            c.execute("""
+                INSERT INTO programs (name, code, has_board_exam, board_exam_name, description, status)
+                VALUES (?,?,?,?,?,'Active')
+            """, prog)
+
+    # ── NCAE Questions ────────────────────────────────────────────────
+    c.execute("SELECT COUNT(*) FROM ncae_questions")
+    if c.fetchone()[0] == 0:
+        try:
+            from ncae_data import ALL_QUESTIONS
+            for program, questions in ALL_QUESTIONS.items():
+                for q in questions:
+                    c.execute("""
+                        INSERT OR IGNORE INTO ncae_questions
+                        (program, question_num, question, option_a, option_b, option_c, option_d, correct_answer, category)
+                        VALUES (?,?,?,?,?,?,?,?,?)
+                    """, [program, q['num'], q['question'], q['a'], q['b'], q['c'], q['d'],
+                          q['answer'], q['category']])
+            print("NCAE questions seeded.")
+        except Exception as e:
+            print(f"NCAE seed skipped: {e}")
 
     conn.commit()
     conn.close()
