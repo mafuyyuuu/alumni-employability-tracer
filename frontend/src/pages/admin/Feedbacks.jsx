@@ -5,7 +5,7 @@ import api from '../../services/api'
 
 const statusStyle = {
   'Hired via platform':  { background: '#e6ede8', color: '#0f2d1a', icon: MdCheckCircle },
-  'Found employment':    { background: '#eff6ff', color: '#2563eb', icon: MdWork },
+  'Found employment':    { background: '#d8ede3', color: '#1a3d27', icon: MdWork },
   'Still looking':       { background: '#fff7ed', color: '#ea580c', icon: MdPending },
 }
 
@@ -42,8 +42,8 @@ export default function Feedbacks() {
             <p className="text-sm text-gray-400 mt-0.5">Alumni employment feedback submissions</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="text-right hidden sm:block"><p className="text-xs font-semibold text-gray-700">Admin</p><p className="text-xs text-gray-400">Administrator</p></div>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-black" style={{ background: '#0f2d1a' }}>A</div>
+            
+            
           </div>
         </div>
 

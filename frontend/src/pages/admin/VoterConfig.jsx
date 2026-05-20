@@ -81,11 +81,8 @@ export default function VoterConfig() {
             <p className="text-sm text-gray-400 mt-0.5">Configure which factors influence employment predictions</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="text-right">
-              <p className="text-xs font-semibold text-gray-700">Admin</p>
-              <p className="text-xs text-gray-400">Administrator</p>
-            </div>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-black" style={{ background: '#0f2d1a' }}>A</div>
+            
+            
           </div>
         </div>
 
@@ -172,7 +169,10 @@ export default function VoterConfig() {
               <button
                 onClick={applySuggestedWeights}
                 disabled={suggesting}
-                className="px-5 py-2.5 border border-indigo-200 rounded-xl text-sm font-semibold text-indigo-700 hover:bg-indigo-50 transition-colors disabled:opacity-60 flex items-center gap-2"
+                className="px-5 py-2.5 border rounded-xl text-sm font-semibold transition-colors disabled:opacity-60 flex items-center gap-2"
+                style={{ borderColor: '#b7e4c7', color: '#0f2d1a' }}
+                onMouseEnter={e => e.currentTarget.style.background='#e6ede8'}
+                onMouseLeave={e => e.currentTarget.style.background='transparent'}
               >
                 {suggesting ? 'Applying…' : <><MdAutoFixHigh /> Use ML Suggested Weights</>}
               </button>

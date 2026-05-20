@@ -66,12 +66,13 @@ def run_rf_forecast(rates, horizon=3):
 
     normalized_rates = [float(r) for r in rates or []]
     horizon = max(int(horizon or 1), 1)
-    if len(normalized_rates) < 4:
+    if len(normalized_rates) < 6:
         return _trend_fallback(normalized_rates, horizon)
 
     lag = min(3, len(normalized_rates) - 1)
     X, y = _build_lag_matrix(normalized_rates, lag)
-    if len(X) < 2:
+    # Need at least 5 training samples for RF to generalise beyond memorising the mean
+    if len(X) < 5:
         return _trend_fallback(normalized_rates, horizon)
 
     model = RandomForestRegressor(

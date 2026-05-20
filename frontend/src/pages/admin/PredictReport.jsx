@@ -10,7 +10,7 @@ export default function PredictReport() {
   const [yearRange, setYearRange] = useState('2019–2024')
   const [model, setModel] = useState('Linear Regression')
   const [reports, setReports] = useState([])
-  const [metrics, setMetrics] = useState({ mae: '—', rmse: '—', mape: '—', r2: '—' })
+  const [metrics, setMetrics] = useState({ mae: 'N/A', rmse: 'N/A', mape: 'N/A', r2: 'N/A' })
   const [metricsByModel, setMetricsByModel] = useState({})
   const [loading, setLoading] = useState(true)
 
@@ -56,11 +56,8 @@ export default function PredictReport() {
             <p className="text-sm text-gray-400 mt-0.5">Generate prediction reports and model evaluations</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="text-right">
-              <p className="text-xs font-semibold text-gray-700">Admin</p>
-              <p className="text-xs text-gray-400">Administrator</p>
-            </div>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-black" style={{ background: '#0f2d1a' }}>A</div>
+            
+            
           </div>
         </div>
 

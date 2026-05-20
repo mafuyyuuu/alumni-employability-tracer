@@ -15,6 +15,7 @@ from routes.companies import companies_bp
 from routes.notifications import notifs_bp
 from routes.feedback import feedback_bp
 from routes.admin import admin_bp
+from routes.company import company_bp
 
 
 def create_app():
@@ -40,6 +41,7 @@ def create_app():
     app.register_blueprint(notifs_bp,    url_prefix='/api/notifications')
     app.register_blueprint(feedback_bp,  url_prefix='/api/feedback')
     app.register_blueprint(admin_bp,     url_prefix='/api/admin')
+    app.register_blueprint(company_bp,   url_prefix='/api/company')
 
     @app.route('/api/health')
     def health():
@@ -63,4 +65,4 @@ if __name__ == '__main__':
         print(f"Seed skipped: {e}")
 
     print("PLP Alumni API running at http://localhost:5001")
-    app.run(debug=True, port=5001, host='0.0.0.0')
+    app.run(debug=True, use_reloader=False, port=5001, host='0.0.0.0')

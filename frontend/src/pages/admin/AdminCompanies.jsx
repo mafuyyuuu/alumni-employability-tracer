@@ -3,7 +3,7 @@ import AdminLayout from '../../components/admin/AdminLayout'
 import { MdAdd, MdSearch, MdEdit, MdDelete, MdBusiness } from 'react-icons/md'
 import api from '../../services/api'
 
-const colors = ['#6366f1', '#f59e0b', '#10b981', '#0ea5e9', '#8b5cf6', '#ef4444']
+const colors = ['#0f2d1a', '#f59e0b', '#10b981', '#2d6a4f', '#1a3d27', '#ef4444']
 
 export default function AdminCompanies() {
   const [companies, setCompanies] = useState([])
@@ -50,8 +50,8 @@ export default function AdminCompanies() {
             <p className="text-sm text-gray-400 mt-0.5">Manage partner companies and job listings</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="text-right hidden sm:block"><p className="text-xs font-semibold text-gray-700">Admin</p><p className="text-xs text-gray-400">Administrator</p></div>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-black" style={{ background: '#0f2d1a' }}>A</div>
+            
+            
           </div>
         </div>
 
@@ -120,7 +120,7 @@ export default function AdminCompanies() {
                 </span>
               </div>
               <div className="col-span-1 flex justify-end gap-1">
-                <button className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors rounded-lg hover:bg-blue-50"><MdEdit className="text-sm" /></button>
+                <button className="p-1.5 text-gray-400 hover:text-green-700 transition-colors rounded-lg hover:bg-green-50"><MdEdit className="text-sm" /></button>
                 <button onClick={() => setDeleteId(c.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"><MdDelete className="text-sm" /></button>
               </div>
             </div>

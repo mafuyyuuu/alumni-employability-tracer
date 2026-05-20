@@ -11,17 +11,19 @@ def _check_password(plain, hashed):
 
 
 def _user_to_dict(row):
+    keys = row.keys()
     return {
         'id': row['id'],
         'first_name': row['first_name'],
-        'middle_name': row['middle_name'],
+        'middle_name': row['middle_name'] if 'middle_name' in keys else '',
         'last_name': row['last_name'],
         'email': row['email'],
         'role': row['role'],
-        'course': row['course'],
-        'graduation_year': row['graduation_year'],
-        'employed': bool(row['employed']),
+        'course': row['course'] if 'course' in keys else '',
+        'graduation_year': row['graduation_year'] if 'graduation_year' in keys else None,
+        'employed': bool(row['employed']) if 'employed' in keys else False,
         'account_status': row['account_status'],
+        'company_id': row['company_id'] if 'company_id' in keys else None,
     }
 
 

@@ -5,10 +5,9 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
-
+# graduation_year can be omitted when year_override is passed to import_training_csv
 REQUIRED_COLUMNS = [
     'course',
-    'graduation_year',
     'GWA',
     'capstone_grade',
     'soft_skills_avg',
@@ -16,35 +15,78 @@ REQUIRED_COLUMNS = [
     'employment_status',
 ]
 
-SKILL_COLUMNS = [
-    'Teaching_skill',
-    'Math_skill',
-    'HTML_skill',
-    'JavaScript_skill',
-    'PHP_skill',
-    'MySQL_skill',
-    'AutoCAD_skill',
-    'EngineeringDesign_skill',
-    'Communication_skill',
-    'Python_skill',
-    'MachineLearning_skill',
-    'Taxation_skill',
-    'Construction_skill',
-    'DataAnalysis_skill',
-    'Excel_skill',
-    'Accounting_skill',
-    'Auditing_skill',
-    'SQL_skill',
-    'Database_skill',
-    'Marketing_skill',
-    'Sales_skill',
-    'Java_skill',
-    'Algorithms_skill',
-    'SystemsAnalysis_skill',
-    'Networking_skill',
-    'Cybersecurity_skill',
-    'Finance_skill',
-]
+# Maps alternate column names (lowercase) → canonical name
+COLUMN_ALIASES = {
+    # course / program
+    'program':                  'course',
+    # graduation year
+    'jr_grad':                  'graduation_year',
+    'grad_year':                'graduation_year',
+    'year_graduated':           'graduation_year',
+    'graduation year':          'graduation_year',
+    # GWA / GPA
+    'cgpa':                     'GWA',
+    'gpa':                      'GWA',
+    'general_weighted_average': 'GWA',
+    'general_average':          'GWA',
+    'gwa':                      'GWA',
+    # capstone / professional grade
+    'prof_grade':               'capstone_grade',
+    'avg_prof_grade':           'capstone_grade',
+    'professional_grade':       'capstone_grade',
+    'thesis_grade':             'capstone_grade',
+    'capstone':                 'capstone_grade',
+    # soft skills
+    'soft_skills':              'soft_skills_avg',
+    'soft_skill':               'soft_skills_avg',
+    'softskills':               'soft_skills_avg',
+    # hard skills
+    'hard_skills':              'hard_skills_avg',
+    'hard_skill':               'hard_skills_avg',
+    'hardskills':               'hard_skills_avg',
+    # employment status
+    'employed':                 'employment_status',
+    'employment':               'employment_status',
+    'employedstatus':           'employment_status',
+    'is_employed':              'employment_status',
+    'status':                   'employment_status',
+}
+
+# Course normalisation — maps non-standard names to canonical codes
+COURSE_ALIASES = {
+    'BS ENTREP':         'BSENTREP',
+    'BS ENTREPRENEUR':   'BSENTREP',
+    'BSENTREP':          'BSENTREP',
+    'BSED MATH':         'BSED',
+    'BSED ENGLISH':      'BSED',
+    'BSED FILIPINO':     'BSED',
+    'BSED SCIENCE':      'BSED',
+    'BSED MAPEH':        'BSED',
+    'AB PSYCH':          'PSYCHOLOGY',
+    'AB PSYCHOLOGY':     'PSYCHOLOGY',
+    'ABPSYCH':           'PSYCHOLOGY',
+    'BS PSYCHOLOGY':     'PSYCHOLOGY',
+}
+
+
+def _normalize_columns(reader_fieldnames):
+    """Return a mapping old_name→canonical_name for any aliased headers."""
+    mapping = {}
+    for col in (reader_fieldnames or []):
+        alias = col.strip().lower().replace(' ', '_')
+        if alias in COLUMN_ALIASES:
+            mapping[col] = COLUMN_ALIASES[alias]
+    return mapping
+
+
+def _apply_column_mapping(row, mapping):
+    """Rename keys in a CSV row dict according to mapping."""
+    if not mapping:
+        return row
+    result = {}
+    for k, v in row.items():
+        result[mapping.get(k, k)] = v
+    return result
 
 
 def _to_float(value, default=0.0):
@@ -67,7 +109,32 @@ def _clamp(value, lo, hi):
 
 def _normalize_course(value):
     text = str(value or '').strip().upper()
-    return text if text else 'UNKNOWN'
+    if not text:
+        return 'UNKNOWN'
+    return COURSE_ALIASES.get(text, text)
+
+
+def _skills_to_percent(value):
+    """Convert a skills score to 0-100 scale.
+    Accepts GWA 1.0-5.0 scale (converts via _gwa_to_grade) or
+    a direct 0-100 percentage. Zero means 'not set'."""
+    v = _to_float(value, 0.0)
+    if v == 0.0:
+        return 0.0
+    if 1.0 <= v <= 5.0:
+        return _gwa_to_grade(v)
+    return _clamp(v, 0.0, 100.0)
+
+
+def _find_skill_columns(row_keys):
+    """Dynamically find all skill columns — any key ending with 'skill' or 'skills'
+    (case-insensitive, handles both 'Teaching_skill' and 'Teaching Skills')."""
+    result = []
+    for key in row_keys:
+        k = key.strip().lower().rstrip('s')  # strip trailing 's' → 'skill'
+        if k.endswith('skill'):
+            result.append(key)
+    return result
 
 
 def _parse_employed(value):
@@ -98,12 +165,15 @@ def _derive_age(graduation_year, current_year):
 
 
 def _derive_elective_grade(row, soft_skills, hard_skills):
+    skill_keys = _find_skill_columns(list(row.keys()))
     values = []
-    for key in SKILL_COLUMNS:
-        raw = (row.get(key) or '').strip()
-        if raw == '':
+    for key in skill_keys:
+        raw = str(row.get(key) or '').strip()
+        if raw in ('', 'nan', 'NaN', 'None'):
             continue
-        values.append(_to_float(raw))
+        v = _to_float(raw, None)
+        if v is not None:
+            values.append(_skills_to_percent(v))
     if values:
         return _clamp(sum(values) / len(values), 50.0, 100.0)
     return _clamp((soft_skills + hard_skills) / 2.0, 50.0, 100.0)
@@ -117,23 +187,29 @@ def _derive_ojt_grade(prof_grade, internship_experience, internship_duration_mon
     return _clamp(score, 55.0, 100.0)
 
 
-def _map_row(row, source_row_id, current_year):
+def _map_row(row, source_row_id, current_year, year_override=None):
     course = _normalize_course(row.get('course'))
-    graduation_year = _to_int(row.get('graduation_year'), 0)
+
+    # graduation_year: use column value if present, else fall back to year_override
+    raw_year = row.get('graduation_year') or row.get('jr_grad') or ''
+    graduation_year = _to_int(raw_year, 0)
+    if graduation_year <= 0 and year_override:
+        graduation_year = int(year_override)
     if graduation_year <= 0:
-        return None, f"row {source_row_id}: invalid graduation_year"
+        return None, f"row {source_row_id}: missing graduation_year (provide dataset_year when uploading)"
 
     employed = _parse_employed(row.get('employment_status'))
     if employed is None:
         return None, f"row {source_row_id}: invalid employment_status"
 
-    avg_grade = _gwa_to_grade(row.get('GWA'))
+    avg_grade     = _gwa_to_grade(row.get('GWA'))
     avg_prof_grade = _gwa_to_grade(row.get('capstone_grade'))
-    soft_skills = _clamp(_to_float(row.get('soft_skills_avg'), 0.0), 0.0, 100.0)
-    hard_skills = _clamp(_to_float(row.get('hard_skills_avg'), 0.0), 0.0, 100.0)
+    # Auto-detect GWA vs percentage scale for skills
+    soft_skills   = _skills_to_percent(row.get('soft_skills_avg', 0))
+    hard_skills   = _skills_to_percent(row.get('hard_skills_avg', 0))
     avg_elec_grade = _derive_elective_grade(row, soft_skills, hard_skills)
-    internship_experience = _to_int(row.get('internship_experience'), 0)
-    internship_duration = _to_float(row.get('internship_duration_months'), 0.0)
+    internship_experience  = _to_int(row.get('internship_experience'), 0)
+    internship_duration    = _to_float(row.get('internship_duration_months'), 0.0)
     ojt_grade = _derive_ojt_grade(avg_prof_grade, internship_experience, internship_duration)
     age = _derive_age(graduation_year, current_year)
 
@@ -153,10 +229,13 @@ def _map_row(row, source_row_id, current_year):
 
 
 def _validate_required_columns(columns):
-    missing = [col for col in REQUIRED_COLUMNS if col not in columns]
+    _validate_required_columns_list(columns, REQUIRED_COLUMNS)
+
+
+def _validate_required_columns_list(columns, required):
+    missing = [col for col in required if col not in columns]
     if missing:
-        missing_str = ', '.join(missing)
-        raise ValueError(f"Dataset is missing required columns: {missing_str}")
+        raise ValueError(f"Dataset is missing required columns: {', '.join(missing)}")
 
 
 def _ensure_ml_training_table(conn):
@@ -190,6 +269,7 @@ def import_training_csv(
     database_path: str | None = None,
     csv_path: str | None = None,
     source_name: str | None = None,
+    year_override: int | None = None,
 ) -> dict:
     db_path = database_path or os.getenv('DATABASE', 'plp_alumni.db')
     dataset_path = Path(csv_path) if csv_path else Path(__file__).resolve().parent / 'data' / 'first_clean_dataset.csv'
@@ -203,11 +283,32 @@ def import_training_csv(
     skipped_rows = 0
     skip_reasons = Counter()
 
-    with dataset_path.open('r', encoding='utf-8-sig', newline='') as f:
-        reader = csv.DictReader(f)
-        columns = reader.fieldnames or []
-        _validate_required_columns(columns)
-        records = list(reader)
+    ext = dataset_path.suffix.lower()
+    if ext in ('.xlsx', '.xls'):
+        try:
+            import pandas as pd
+            df = pd.read_excel(dataset_path)
+            raw_columns = list(df.columns)
+            col_mapping = _normalize_columns(raw_columns)
+            records = []
+            for _, row_series in df.iterrows():
+                row_dict = {col_mapping.get(c, c): ('' if str(v) in ('nan', 'NaT') else str(v) if not isinstance(v, str) else v)
+                            for c, v in row_series.items()}
+                records.append(row_dict)
+            normalized_columns = [col_mapping.get(c, c) for c in raw_columns]
+        except ImportError:
+            raise ValueError("pandas/openpyxl required to import Excel files. Run: pip install openpyxl")
+    else:
+        with dataset_path.open('r', encoding='utf-8-sig', newline='') as f:
+            reader = csv.DictReader(f)
+            raw_columns = reader.fieldnames or []
+            col_mapping = _normalize_columns(raw_columns)
+            normalized_columns = [col_mapping.get(c, c) for c in raw_columns]
+            records = [_apply_column_mapping(row, col_mapping) for row in reader]
+
+    # graduation_year is optional when year_override is supplied
+    required = [c for c in REQUIRED_COLUMNS if not (c == 'graduation_year' and year_override)]
+    _validate_required_columns_list(normalized_columns, required)
 
     conn = sqlite3.connect(db_path)
     try:
@@ -216,7 +317,7 @@ def import_training_csv(
         for line_num, row in enumerate(records, start=2):
             total_rows += 1
             source_row_id = (row.get('alumni_id') or '').strip() or str(line_num)
-            mapped, reason = _map_row(row, source_row_id, current_year)
+            mapped, reason = _map_row(row, source_row_id, current_year, year_override=year_override)
             if not mapped:
                 skipped_rows += 1
                 skip_reasons[reason] += 1

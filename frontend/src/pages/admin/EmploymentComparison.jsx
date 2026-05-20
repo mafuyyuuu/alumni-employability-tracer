@@ -26,10 +26,10 @@ export default function EmploymentComparison() {
   }, [])
 
   const summaryCards = [
-    { label: 'Avg Rate (5yr)', value: summary.avg_rate   || '—', delta: summary.avg_delta   || '' },
-    { label: 'Best Program',   value: summary.best_prog  || '—', delta: summary.best_rate   || '' },
-    { label: 'Peak Year',      value: summary.peak_year  || '—', delta: summary.peak_rate   || '' },
-    { label: 'Gender Gap',     value: summary.gender_gap || '—', delta: summary.gender_note || '' },
+    { label: 'Avg Rate (5yr)', value: summary.avg_rate   || 'N/A', delta: summary.avg_delta   || '' },
+    { label: 'Best Program',   value: summary.best_prog  || 'N/A', delta: summary.best_rate   || '' },
+    { label: 'Peak Year',      value: summary.peak_year  || 'N/A', delta: summary.peak_rate   || '' },
+    { label: 'Gender Gap',     value: summary.gender_gap || 'N/A', delta: summary.gender_note || '' },
   ]
 
   return (
@@ -42,11 +42,8 @@ export default function EmploymentComparison() {
             <p className="text-sm text-gray-400 mt-0.5">Compare employment rates across dimensions</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="text-right">
-              <p className="text-xs font-semibold text-gray-700">Admin</p>
-              <p className="text-xs text-gray-400">Administrator</p>
-            </div>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-black" style={{ background: '#0f2d1a' }}>A</div>
+            
+            
           </div>
         </div>
 

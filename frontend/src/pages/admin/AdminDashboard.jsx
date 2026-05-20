@@ -10,10 +10,10 @@ import { MdPeople, MdTrendingUp, MdSchool, MdErrorOutline,
 import api from '../../services/api'
 
 const quickActions = [
-  { label: 'Upload Data Model', icon: MdUploadFile, to: '/admin/upload-model', grad: '#0f2d1a' },
-  { label: 'Forecasting',       icon: MdInsights,   to: '/admin/forecasting',  grad: '#1d4ed8' },
-  { label: 'Generate Reports',  icon: MdAssessment, to: '/admin/predict-report', grad: '#7c3aed' },
-  { label: 'View History',      icon: MdHistory,    to: '/admin/employment-comparison', grad: '#b45309' },
+  { label: 'Upload Data Model', icon: MdUploadFile, to: '/admin/upload-model',          grad: '#1a3d27' },
+  { label: 'Forecasting',       icon: MdInsights,   to: '/admin/forecasting',            grad: '#1a3d27' },
+  { label: 'Generate Reports',  icon: MdAssessment, to: '/admin/predict-report',         grad: '#1a3d27' },
+  { label: 'View History',      icon: MdHistory,    to: '/admin/employment-comparison',  grad: '#1a3d27' },
 ]
 
 const CustomDot = ({ cx, cy, payload }) =>
@@ -49,10 +49,10 @@ export default function AdminDashboard() {
   }, [model])
 
   const metricCards = [
-    { label: 'Total Alumni',     value: metrics.total_alumni,      sub: '+124 this year',            icon: MdPeople,       color: '#6366f1', bg: '#eef2ff' },
-    { label: 'Employment Rate',  value: `${metrics.employment_rate}%`, sub: `↑ ${metrics.employment_rate_change}% vs last year`, icon: MdTrendingUp, color: '#0f2d1a', bg: '#e6ede8' },
-    { label: 'Graduate Success', value: `${metrics.graduate_success}%`, sub: 'Of total graduates',      icon: MdSchool,       color: '#0ea5e9', bg: '#f0f9ff' },
-    { label: 'Margin of Error',  value: `±${metrics.margin_of_error}%`, sub: 'Forecast model accuracy',   icon: MdErrorOutline, color: '#f59e0b', bg: '#fffbeb' },
+    { label: 'Total Alumni',     value: metrics.total_alumni,          sub: '+124 this year',                    icon: MdPeople,       color: '#0f2d1a', bg: '#e6ede8' },
+    { label: 'Employment Rate',  value: `${metrics.employment_rate}%`,  sub: `↑ ${metrics.employment_rate_change}% vs last year`, icon: MdTrendingUp, color: '#10b981', bg: '#f0fdf4' },
+    { label: 'Graduate Success', value: `${metrics.graduate_success}%`, sub: 'Of total graduates',                icon: MdSchool,       color: '#2d6a4f', bg: '#e6ede8' },
+    { label: 'Margin of Error',  value: `±${metrics.margin_of_error}%`, sub: 'Forecast model accuracy',           icon: MdErrorOutline, color: '#f59e0b', bg: '#fffbeb' },
   ]
 
   const forecastYear = employmentData.find(d => d.forecast)?.year
@@ -67,8 +67,8 @@ export default function AdminDashboard() {
             <p className="text-sm text-gray-400 mt-0.5">Overview of alumni employment data and forecasts</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="text-right"><p className="text-xs font-semibold text-gray-700">Admin</p><p className="text-xs text-gray-400">Administrator</p></div>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-black" style={{ background: '#0f2d1a' }}>A</div>
+            
+            
           </div>
         </div>
 
