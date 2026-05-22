@@ -16,6 +16,7 @@ const sections = [
     label: 'Analytics',
     items: [
       { label: 'Forecasting',           to: '/admin/forecasting',           icon: MdShowChart },
+      { label: 'Predict Upcoming',      to: '/admin/predict-upcoming',      icon: MdAssessment },
       { label: 'Employment Comparison', to: '/admin/employment-comparison', icon: MdCompareArrows },
       { label: 'Predict & Report',      to: '/admin/predict-report',        icon: MdAssessment },
     ],
@@ -23,7 +24,7 @@ const sections = [
   {
     label: 'Management',
     items: [
-      { label: 'Voter Config',      to: '/admin/voter-config', icon: MdSettings },
+      { label: 'Factors Configuration', to: '/admin/voter-config', icon: MdSettings },
       { label: 'Programs',          to: '/admin/programs',     icon: MdSchool },
       { label: 'Companies',         to: '/admin/companies',    icon: MdBusiness },
       { label: 'Jobs',              to: '/admin/jobs',         icon: MdWork },

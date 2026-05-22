@@ -1,226 +1,198 @@
-﻿import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout'
-import { MdSave, MdRefresh, MdToggleOn, MdToggleOff, MdAutoFixHigh } from 'react-icons/md'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import { MdRefresh } from 'react-icons/md'
 import api from '../../services/api'
 
-const defaultFields = [
-  { id: 1, name: 'GPA / Average Grade',  key: 'gpa',         enabled: true,  weight: 25 },
-  { id: 2, name: 'Professional Grade',   key: 'prof_grade',  enabled: true,  weight: 20 },
-  { id: 3, name: 'Elective Grade',       key: 'elec_grade',  enabled: true,  weight: 15 },
-  { id: 4, name: 'OJT Grade',            key: 'ojt_grade',   enabled: true,  weight: 15 },
-  { id: 5, name: 'Soft Skills Average',  key: 'soft_skills', enabled: true,  weight: 10 },
-  { id: 6, name: 'Hard Skills Average',  key: 'hard_skills', enabled: true,  weight: 10 },
-  { id: 7, name: 'Age',                  key: 'age',         enabled: false, weight: 5  },
-  { id: 8, name: 'Gender',               key: 'gender',      enabled: false, weight: 0  },
-]
-
 export default function VoterConfig() {
-  const [fields, setFields] = useState(defaultFields)
-  const [useVoterWeights, setUseVoterWeights] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [suggesting, setSuggesting] = useState(false)
-  const [suggestError, setSuggestError] = useState('')
+  const [factors, setFactors] = useState([])
+  const [programs, setPrograms] = useState([]) // Array of {code, name}
+  const [program, setProgram] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  function loadFactors(nextProgram = program) {
+    setLoading(true)
+    setError('')
+    // Strictly use 'lr' as per institutional requirement
+    api.get('/admin/factors-configuration', { 
+      params: { 
+        model: 'lr', 
+        program: nextProgram || undefined 
+      } 
+    }).then(r => {
+      setFactors(r.data.factors || [])
+    }).catch(err => {
+      setError(err.response?.data?.error || 'Unable to load ML factor insights')
+      setFactors([])
+    }).finally(() => setLoading(false))
+  }
 
   useEffect(() => {
-    api.get('/admin/voter-config').then(r => {
-      if (r.data.config && r.data.config.length) setFields(r.data.config)
-      setUseVoterWeights(Boolean(r.data.use_voter_weights))
+    api.get('/admin/programs').then(r => {
+      setPrograms(r.data.programs || [])
     }).catch(() => {})
   }, [])
 
-  function toggle(id) {
-    setFields(prev => prev.map(f => f.id === id ? { ...f, enabled: !f.enabled } : f))
-    setSaved(false)
-  }
+  useEffect(() => {
+    loadFactors(program)
+  }, [program])
 
-  function setWeight(id, val) {
-    setFields(prev => prev.map(f => f.id === id ? { ...f, weight: Number(val) } : f))
-    setSaved(false)
+  // Custom Bar Color based on weight
+  const getBarColor = (weight) => {
+    if (weight > 30) return '#0f2d1a'
+    if (weight > 15) return '#1b4d2e'
+    if (weight > 5) return '#2d6a4f'
+    return '#52b788'
   }
-
-  function save() {
-    setSaving(true)
-    api.put('/admin/voter-config', { config: fields, use_voter_weights: useVoterWeights }).then(() => {
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2500)
-    }).catch(() => alert('Failed to save configuration')).finally(() => setSaving(false))
-  }
-
-  function reset() {
-    setFields(defaultFields)
-    setUseVoterWeights(false)
-    setSaved(false)
-  }
-
-  async function applySuggestedWeights() {
-    setSuggesting(true)
-    setSuggestError('')
-    setSaved(false)
-    try {
-      const r = await api.post('/admin/voter-config/suggest', {})
-      if (r.data?.config?.length) {
-        setFields(r.data.config)
-      }
-    } catch (err) {
-      setSuggestError(err.response?.data?.error || 'Unable to load ML suggested weights')
-    } finally {
-      setSuggesting(false)
-    }
-  }
-
-  const totalWeight = fields.filter(f => f.enabled).reduce((s, f) => s + f.weight, 0)
 
   return (
     <AdminLayout>
       <div className="p-4 sm:p-6 page-enter">
         {/* Header */}
-        <div className="flex items-center justify-between mb-7">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Voter Configuration</h1>
-            <p className="text-sm text-gray-400 mt-0.5">Configure which factors influence employment predictions</p>
+            <h1 className="text-2xl font-bold text-gray-900">Factors Configuration</h1>
+            <p className="text-sm text-gray-500 mt-1">Institutional drivers influencing employability predictions</p>
           </div>
           <div className="flex items-center gap-3">
-            
-            
+            <button
+              onClick={() => loadFactors()}
+              className="p-2.5 text-emerald-900 bg-emerald-50 hover:bg-emerald-100 rounded-xl border border-emerald-100 transition-colors flex items-center gap-2 font-bold text-xs"
+            >
+              <MdRefresh size={18} /> Refresh Analysis
+            </button>
           </div>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-5">
-          {/* Fields config table */}
-          <div className="flex-1 bg-white rounded-2xl p-6" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-            <div className="mb-5 p-4 rounded-xl border border-gray-100 bg-gray-50">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-sm font-bold text-gray-900">Prediction Decision Mode</h2>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {useVoterWeights
-                      ? 'Voter weights are the active decision maker for employability prediction.'
-                      : 'ML model is the default decision maker. Voter weights are saved but inactive.'}
-                  </p>
-                </div>
-                <button
-                  onClick={() => { setUseVoterWeights(prev => !prev); setSaved(false) }}
-                  className="text-3xl transition-colors"
-                  style={{ color: useVoterWeights ? '#0f2d1a' : '#d1d5db' }}
-                  title="Toggle prediction mode"
+        <div className="grid grid-cols-1 gap-6">
+          {/* Controls */}
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+            <div className="flex flex-col sm:flex-row gap-4 items-end">
+              <div className="flex-1 w-full">
+                <label className="block text-xs font-bold text-emerald-900 uppercase tracking-wider mb-2">Filter by Program</label>
+                <select
+                  value={program}
+                  onChange={e => setProgram(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 >
-                  {useVoterWeights ? <MdToggleOn /> : <MdToggleOff />}
-                </button>
+                  <option value="">All University Programs</option>
+                  {programs.map(p => (
+                    <option key={p.code} value={p.code}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="hidden sm:block pb-1">
+                <p className="text-xs text-gray-400 italic">Showing top 10 weighted factors for the Linear Regression model</p>
               </div>
             </div>
-
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-sm font-bold text-gray-900">Prediction Factors</h2>
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-full"
-                style={{
-                  background: totalWeight === 100 || !useVoterWeights ? '#e6ede8' : '#fff7ed',
-                  color: totalWeight === 100 || !useVoterWeights ? '#0f2d1a' : '#ea580c',
-                }}>
-                Total: {totalWeight}%{totalWeight !== 100 && useVoterWeights ? ' (should be 100%)' : ''}
-              </span>
-            </div>
-
-            {!useVoterWeights && (
-              <p className="text-xs text-gray-400 mb-2">
-                Voter weighting is currently inactive. These factors are saved as standby configuration.
-              </p>
-            )}
-
-            <div
-              className="grid grid-cols-12 text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 px-1"
-              style={!useVoterWeights ? { filter: 'grayscale(100%) blur(0.2px)', opacity: 0.65 } : {}}
-            >
-              <span className="col-span-1">On</span>
-              <span className="col-span-5">Factor</span>
-              <span className="col-span-3">Variable Key</span>
-              <span className="col-span-3 text-right">Weight (%)</span>
-            </div>
-
-            <div
-              className="space-y-2"
-              style={!useVoterWeights ? { filter: 'grayscale(100%) blur(0.2px)', opacity: 0.65 } : {}}
-            >
-              {fields.map(f => (
-                <div key={f.id} className="grid grid-cols-12 items-center p-3 rounded-xl transition-all"
-                  style={{ background: f.enabled ? '#f9fafb' : '#fafafa', opacity: f.enabled ? 1 : 0.55 }}>
-                  <div className="col-span-1">
-                    <button onClick={() => toggle(f.id)} className="text-2xl transition-colors" style={{ color: f.enabled ? '#0f2d1a' : '#d1d5db' }}>
-                      {f.enabled ? <MdToggleOn /> : <MdToggleOff />}
-                    </button>
-                  </div>
-                  <div className="col-span-5">
-                    <p className="text-sm font-semibold text-gray-700">{f.name}</p>
-                  </div>
-                  <div className="col-span-3">
-                    <code className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{f.key}</code>
-                  </div>
-                  <div className="col-span-3 flex justify-end">
-                    <input type="number" min={0} max={100} value={f.weight} disabled={!f.enabled}
-                      onChange={e => setWeight(f.id, e.target.value)}
-                      className="w-16 text-right border border-gray-200 rounded-lg px-2 py-1 text-xs font-semibold text-gray-700 disabled:opacity-40 focus:outline-none focus:ring-1"
-                      style={{ '--tw-ring-color': '#0f2d1a' }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex justify-between flex-wrap gap-3 mt-5 pt-5 border-t border-gray-100">
-              <button
-                onClick={applySuggestedWeights}
-                disabled={suggesting}
-                className="px-5 py-2.5 border rounded-xl text-sm font-semibold transition-colors disabled:opacity-60 flex items-center gap-2"
-                style={{ borderColor: '#b7e4c7', color: '#0f2d1a' }}
-                onMouseEnter={e => e.currentTarget.style.background='#e6ede8'}
-                onMouseLeave={e => e.currentTarget.style.background='transparent'}
-              >
-                {suggesting ? 'Applying…' : <><MdAutoFixHigh /> Use ML Suggested Weights</>}
-              </button>
-              <div className="flex gap-3">
-              <button onClick={reset}
-                className="px-5 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors flex items-center gap-2">
-                <MdRefresh /> Reset
-              </button>
-              <button onClick={save} disabled={saving}
-                className="px-6 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 disabled:opacity-60 flex items-center gap-2"
-                style={{ background: '#0f2d1a' }}>
-                {saved ? <><span>✓</span> Saved!</> : <><MdSave /> Save Configuration</>}
-              </button>
-              </div>
-            </div>
-            {suggestError && <p className="text-xs text-red-500 mt-3">{suggestError}</p>}
           </div>
 
-          {/* Info panel */}
-            <div className="w-full lg:w-64 space-y-4">
-            <div
-              className="bg-white rounded-2xl p-5"
-              style={{
-                boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-                ...(useVoterWeights ? {} : { filter: 'grayscale(100%) blur(0.2px)', opacity: 0.65 }),
-              }}
-            >
-              <h3 className="text-xs font-bold text-gray-900 mb-3">Active Factors</h3>
-              <div className="space-y-2">
-                {fields.filter(f => f.enabled).map(f => (
-                  <div key={f.id} className="flex items-center justify-between">
-                    <span className="text-xs text-gray-600">{f.name}</span>
-                    <div className="flex items-center gap-1.5">
-                      <div className="h-1.5 rounded-full" style={{ width: `${f.weight * 1.2}px`, background: '#0f2d1a', minWidth: 4 }} />
-                      <span className="text-xs font-bold" style={{ color: '#0f2d1a' }}>{f.weight}%</span>
-                    </div>
-                  </div>
-                ))}
+          {/* Main Chart */}
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 min-h-[500px]">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">
+                  Primary Drivers (Linear Regression)
+                  {program && <span className="text-emerald-600 ml-2">· {program}</span>}
+                </h2>
+                <p className="text-xs text-gray-500 mt-1">Weights represent the direct linear impact on employment probability</p>
               </div>
             </div>
-            <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-              <h3 className="text-xs font-bold text-gray-900 mb-2">Notes</h3>
-              <ul className="space-y-2 text-xs text-gray-500">
-                <li className="flex gap-2"><span className="text-green-500 flex-shrink-0">•</span> Weights must sum to 100%</li>
-                <li className="flex gap-2"><span className="text-green-500 flex-shrink-0">•</span> Disabled factors are excluded from the model</li>
-                <li className="flex gap-2"><span className="text-green-500 flex-shrink-0">•</span> ML mode is default; voter mode is optional via toggle above</li>
-                <li className="flex gap-2"><span className="text-green-500 flex-shrink-0">•</span> Voter settings apply to employability prediction, not ARIMA trend forecasting</li>
-              </ul>
+
+            {loading && (
+              <div className="flex flex-col items-center justify-center py-32">
+                <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="text-sm text-gray-400 font-medium">Analyzing factors...</p>
+              </div>
+            )}
+            
+            {!loading && error && (
+              <div className="text-center py-32">
+                <p className="text-sm text-red-500 bg-red-50 inline-block px-4 py-2 rounded-lg">{error}</p>
+              </div>
+            )}
+            
+            {!loading && !error && factors.length === 0 && (
+              <div className="text-center py-32">
+                <p className="text-sm text-gray-400">No factor insights available for this configuration.</p>
+              </div>
+            )}
+
+            {!loading && !error && factors.length > 0 && (
+              <div className="h-[450px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart 
+                    data={factors} 
+                    layout="vertical" 
+                    margin={{ top: 5, right: 60, left: 40, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                    <XAxis
+                      type="number"
+                      domain={[0, 100]}
+                      tick={{ fontSize: 11, fill: '#94a3b8' }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={v => `${v}%`}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="label"
+                      tick={{ fontSize: 13, fill: '#1e293b', fontWeight: 600 }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={180}
+                    />
+                    <Tooltip 
+                      cursor={{ fill: '#f8fafc' }}
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-white p-4 shadow-xl border border-gray-100 rounded-xl">
+                              <p className="text-xs font-bold text-gray-400 uppercase mb-1">{data.label}</p>
+                              <div className="flex items-center gap-2">
+                                <span className="text-2xl font-black text-emerald-900">{data.weight}%</span>
+                                <span className="text-xs text-gray-500">Relative Weight</span>
+                              </div>
+                              <div className="mt-3 pt-3 border-t border-gray-50">
+                                <p className="text-[10px] text-gray-400 leading-relaxed max-w-[200px]">
+                                  {data.weight === 0 
+                                    ? "This factor has 0% impact because it has constant values in the current dataset. The model needs varied data (e.g., both passers and non-passers) to identify a pattern."
+                                    : "This coefficient indicates a direct linear relationship with employment probability."}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Bar dataKey="weight" radius={[0, 6, 6, 0]} barSize={32}>
+                      {factors.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={getBarColor(entry.weight)} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+          
+          {/* Legend/Helper Footer */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100">
+              <h4 className="text-xs font-bold text-emerald-900 uppercase mb-1">Impact Level</h4>
+              <p className="text-[11px] text-emerald-700 leading-relaxed">
+                Darker bars indicate high-impact factors that the university should prioritize in curriculum or student support.
+              </p>
+            </div>
+            <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100">
+              <h4 className="text-xs font-bold text-blue-900 uppercase mb-1">Statistical Method</h4>
+              <p className="text-[11px] text-blue-700 leading-relaxed">
+                Using Ordinary Least Squares (OLS) to identify clear, interpretable trends across graduate cohorts.
+              </p>
             </div>
           </div>
         </div>

@@ -5,6 +5,7 @@ import joblib
 import os
 import warnings
 from datetime import datetime, timezone
+from typing import Optional
 
 try:
     from ml.training_data import (
@@ -26,7 +27,7 @@ base_dir = os.path.dirname(os.path.abspath(__file__))
 models_dir = os.path.join(base_dir, 'saved_models')
 
 
-def train_random_forest(database_path: str | None = None) -> dict:
+def train_random_forest(database_path: Optional[str] = None) -> dict:
     print("--- Starting ML Pipeline: Random Forest (DB Source) ---")
     df = load_training_dataframe(database_path)
     validate_training_dataframe(df)
@@ -38,9 +39,12 @@ def train_random_forest(database_path: str | None = None) -> dict:
     )
 
     rf_model = RandomForestClassifier(
-        n_estimators=300,
+        n_estimators=500,
+        max_depth=20,
+        min_samples_split=5,
         random_state=42,
         class_weight='balanced',
+        n_jobs=-1
     )
     rf_model.fit(X_train, y_train)
 

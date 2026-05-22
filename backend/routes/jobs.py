@@ -95,9 +95,24 @@ def admin_required(fn):
     return wrapper
 
 
-def job_row(row, idx=0, course=''):
+def job_row(row, idx=0, user_data=None):
     title = row['title']
     category = row['category'] if 'category' in row.keys() else ''
+    course = user_data['course'] if user_data else ''
+    
+    required_hard = float(row['required_hard_skills']) if 'required_hard_skills' in row.keys() else 60.0
+    required_soft = float(row['required_soft_skills']) if 'required_soft_skills' in row.keys() else 60.0
+    
+    skill_match = 0
+    if user_data:
+        user_hard = float(user_data['hard_skills'] or 0)
+        user_soft = float(user_data['soft_skills'] or 0)
+        
+        # Simple weighted average match
+        hard_match = min(1.0, user_hard / required_hard) if required_hard > 0 else 1.0
+        soft_match = min(1.0, user_soft / required_soft) if required_soft > 0 else 1.0
+        skill_match = round((hard_match * 0.7 + soft_match * 0.3) * 100)
+
     return {
         'id': row['id'],
         'title': title,
@@ -112,7 +127,12 @@ def job_row(row, idx=0, course=''):
         'posted': row['posted_at'][:10] if row['posted_at'] else '',
         'color': COLORS[idx % len(COLORS)],
         'source': 'Platform',
-        'recommended': is_job_recommended(title, category, course) if course else False,
+        'recommended': is_job_recommended(title, category, course) or (skill_match >= 85),
+        'skill_match': skill_match,
+        'required_skills': {
+            'hard': required_hard,
+            'soft': required_soft
+        }
     }
 
 
@@ -122,9 +142,13 @@ def list_jobs():
     user_id = get_jwt_identity()
     db = get_db()
 
-    # Get user's course for program-based recommendations
-    user = db.execute('SELECT course FROM users WHERE id = ?', [user_id]).fetchone()
-    course = request.args.get('course', user['course'] if user else '') or ''
+    # Get user's course and skills for program-based recommendations and matching
+    user = db.execute('SELECT course, hard_skills, soft_skills FROM users WHERE id = ?', [user_id]).fetchone()
+    user_data = {
+        'course': (request.args.get('course') or (user['course'] if user else '')) or '',
+        'hard_skills': user['hard_skills'] if user else 0,
+        'soft_skills': user['soft_skills'] if user else 0
+    }
 
     search = request.args.get('search', '').lower()
     location = request.args.get('location', '').lower()
@@ -148,8 +172,8 @@ def list_jobs():
 
     query += " ORDER BY posted_at DESC"
     rows = db.execute(query, params).fetchall()
-    jobs = [job_row(r, i, course) for i, r in enumerate(rows)]
-    return jsonify({'jobs': jobs, 'total': len(jobs), 'course': course}), 200
+    jobs = [job_row(r, i, user_data) for i, r in enumerate(rows)]
+    return jsonify({'jobs': jobs, 'total': len(jobs), 'course': user_data['course']}), 200
 
 
 @jobs_bp.route('/saved', methods=['GET'])

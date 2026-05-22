@@ -407,9 +407,10 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
           {result.accounts && (
             <div className="rounded-xl bg-green-50 border border-green-100 px-4 py-3 text-xs">
               <p className="font-bold text-green-900 mb-2 flex items-center gap-1"><MdPeople /> Alumni Accounts</p>
-              <div className="grid grid-cols-3 gap-2 mb-2">
+              <div className="grid grid-cols-4 gap-2 mb-2">
                 {[
                   { label: 'Created', value: result.accounts.created?.length ?? 0, color: '#10b981' },
+                  { label: 'Updated', value: result.accounts.updated?.length ?? 0, color: '#0f2d1a' },
                   { label: 'Skipped', value: result.accounts.skipped?.length ?? 0, color: '#f59e0b' },
                   { label: 'Failed',  value: result.accounts.failed?.length  ?? 0, color: '#ef4444' },
                 ].map(s => (

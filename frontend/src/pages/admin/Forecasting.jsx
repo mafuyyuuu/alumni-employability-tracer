@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine, BarChart, Bar,
+  ResponsiveContainer, ReferenceLine, BarChart, Bar, Cell
 } from 'recharts'
 import { MdShowChart, MdTrendingUp, MdInfoOutline, MdCheckCircle } from 'react-icons/md'
 import api from '../../services/api'
@@ -273,18 +273,60 @@ export default function Forecasting() {
           </div>
 
           {/* By Program chart */}
-          <div className="w-full lg:w-96 bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-            <h3 className="text-sm font-bold text-gray-900 mb-3">Employment Rate by Program</h3>
-            <p className="text-xs text-gray-400 mb-4">Based on latest available year data</p>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={courseData} layout="vertical" margin={{ left: 0, right: 30, top: 4, bottom: 4 }}>
-                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: '#374151', fontWeight: 600 }} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} />
-                <YAxis type="category" dataKey="course" tick={{ fontSize: 11, fill: '#374151', fontWeight: 600 }} axisLine={false} tickLine={false} width={46} />
-                <Tooltip formatter={v => [`${v}%`, 'Employment Rate']} />
-                <Bar dataKey="rate" fill="#0f2d1a" radius={[0, 4, 4, 0]}
-                  label={{ position: 'right', fontSize: 11, fill: '#374151', fontWeight: 700, formatter: v => `${v}%` }} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="w-full lg:w-96 bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Employment by Program</h3>
+                <p className="text-[10px] text-gray-400 mt-0.5 uppercase tracking-wider font-bold">Latest Year Analysis</p>
+              </div>
+            </div>
+            {/* Scrollable container for many programs */}
+            <div className="flex-1 min-h-[420px] overflow-y-auto custom-scrollbar pr-2">
+              <div style={{ height: `${Math.max(400, courseData.length * 45)}px`, width: '100%' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={courseData} layout="vertical" margin={{ left: -10, right: 40, top: 0, bottom: 0 }}>
+                    <XAxis type="number" domain={[0, 100]} hide />
+                    <YAxis 
+                      type="category" 
+                      dataKey="course" 
+                      tick={{ fontSize: 10, fill: '#1e293b', fontWeight: 700 }} 
+                      axisLine={false} 
+                      tickLine={false} 
+                      width={150} 
+                    />
+                    <Tooltip 
+                      cursor={{ fill: '#f8fafc' }}
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="bg-white p-3 shadow-xl border border-gray-100 rounded-xl">
+                              <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">{payload[0].payload.course}</p>
+                              <p className="text-lg font-black text-emerald-900">{payload[0].value}%</p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Bar dataKey="rate" radius={[0, 6, 6, 0]} barSize={20}>
+                      {courseData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.rate > 70 ? '#0f2d1a' : entry.rate > 50 ? '#2d6a4f' : '#52b788'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div className="mt-4 pt-4 border-t border-gray-50 flex items-center justify-between">
+               <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-emerald-900" />
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-tighter">High (70%+)</span>
+               </div>
+               <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-tighter">Growth</span>
+               </div>
+            </div>
           </div>
         </div>
 

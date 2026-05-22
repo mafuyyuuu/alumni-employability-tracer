@@ -39,6 +39,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate()
   const [metrics, setMetrics] = useState({ total_alumni: '…', employment_rate: '…', employment_rate_change: 0, graduate_success: '…', margin_of_error: '…' })
   const [employmentData, setEmploymentData] = useState([])
+  const [health, setHealth] = useState(null)
   const [model, setModel] = useState('Linear Regression')
 
   useEffect(() => {
@@ -46,6 +47,8 @@ export default function AdminDashboard() {
       setMetrics(r.data.metrics)
       setEmploymentData(r.data.employment_data || [])
     }).catch(() => {})
+
+    api.get('/admin/data-health').then(r => setHealth(r.data)).catch(() => {})
   }, [model])
 
   const metricCards = [
@@ -138,7 +141,7 @@ export default function AdminDashboard() {
 
           {/* Quick Actions */}
           <div className="w-full lg:w-56 lg:flex-shrink-0">
-            <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+            <div className="bg-white rounded-2xl p-5 mb-5" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
               <h2 className="text-sm font-bold text-gray-900 mb-4">Quick Actions</h2>
               <div className="space-y-2.5">
                 {quickActions.map((action) => {
@@ -153,6 +156,36 @@ export default function AdminDashboard() {
                 })}
               </div>
             </div>
+
+            {/* Data Health Mini Widget */}
+            {health && (
+              <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                <h2 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <MdAssessment className="text-emerald-600" /> Data Health
+                </h2>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-gray-400 font-bold uppercase">Balance</span>
+                    <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${health.balance?.status === 'Balanced' ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-800'}`}>
+                      {health.balance?.status}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {health.metrics?.slice(0, 3).map((m, i) => (
+                      <div key={i} className="flex justify-between items-center text-[10px]">
+                        <span className="text-gray-500">{m.field}</span>
+                        <span className={m.status === 'Good' ? 'text-emerald-600' : 'text-orange-500 font-bold'}>
+                          {m.missing_pct}% missing
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="pt-2 border-t border-gray-50">
+                    <p className="text-[10px] text-gray-400 italic">Total Training Rows: <span className="font-bold text-gray-600">{health.total_rows}</span></p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

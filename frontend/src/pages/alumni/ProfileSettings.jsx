@@ -15,8 +15,10 @@ export default function ProfileSettings() {
   })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [programs, setPrograms] = useState([])
 
   useEffect(() => {
+    // Fetch profile
     api.get('/alumni/profile').then(r => {
       const p = r.data.profile
       setForm({
@@ -28,6 +30,9 @@ export default function ProfileSettings() {
         monthsToEmployment: p.monthsToEmployment != null ? String(p.monthsToEmployment) : '',
       })
     }).catch(() => {})
+
+    // Fetch programs
+    api.get('/admin/programs').then(r => setPrograms(r.data.programs || [])).catch(() => {})
   }, [])
 
   const handleChange = e => setForm({ ...form, [e.target.name]: e.target.value })
@@ -108,13 +113,9 @@ export default function ProfileSettings() {
               <label className={label} style={{ color: '#0f2d1a' }}>Degree Program</label>
               <select name="degree" value={form.degree} onChange={handleChange} className={input}>
                 <option value="">Select your program</option>
-                <option value="BSCS">BSCS – Bachelor of Science in Computer Science</option>
-                <option value="BSIT">BSIT – Bachelor of Science in Information Technology</option>
-                <option value="BSBA">BSBA – Bachelor of Science in Business Administration</option>
-                <option value="BSA">BSA – Bachelor of Science in Accountancy</option>
-                <option value="BSEd">BSEd – Bachelor of Science in Education</option>
-                <option value="BSHM">BSHM – Bachelor of Science in Hospitality Management</option>
-                <option value="BSN">BSN – Bachelor of Science in Nursing</option>
+                {programs.map(p => (
+                  <option key={p.code} value={p.code}>{p.code} – {p.name}</option>
+                ))}
               </select>
             </div>
             <Field name="avgGrade" label="Average Grade" type="number" step="0.01" />

@@ -89,6 +89,8 @@ function getPageRange(current, total, width = 5) {
 
 function JobCard({ job, isSaved, onSave }) {
   const [expanded, setExpanded] = useState(false)
+  const matchColor = job.skill_match >= 85 ? '#0f2d1a' : job.skill_match >= 60 ? '#f59e0b' : '#ef4444'
+
   return (
     <div className="bg-white rounded-2xl overflow-hidden transition-all"
       style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: job.recommended ? '1.5px solid #d4e4d8' : '1.5px solid transparent' }}>
@@ -105,17 +107,27 @@ function JobCard({ job, isSaved, onSave }) {
                 {job.recommended && (
                   <span className="flex items-center gap-0.5 text-xs font-bold px-1.5 py-0.5 rounded-full flex-shrink-0"
                     style={{ background: '#e6ede8', color: '#0f2d1a', fontSize: '10px' }}>
-                    <MdStar className="text-xs" /> Match
+                    <MdStar className="text-xs" /> Recommended
                   </span>
                 )}
               </div>
               <p className="text-xs font-medium mt-0.5" style={{ color: '#0f2d1a' }}>{job.company}</p>
             </div>
-            <button onClick={() => onSave(job)} className="transition-colors flex-shrink-0"
-              style={{ color: isSaved ? '#0f2d1a' : '#d1d5db' }}>
-              {isSaved ? <MdBookmark className="text-lg" /> : <MdBookmarkBorder className="text-lg" />}
-            </button>
+            <div className="flex flex-col items-end gap-1">
+              <button onClick={() => onSave(job)} className="transition-colors flex-shrink-0"
+                style={{ color: isSaved ? '#0f2d1a' : '#d1d5db' }}>
+                {isSaved ? <MdBookmark className="text-lg" /> : <MdBookmarkBorder className="text-lg" />}
+              </button>
+              {job.skill_match > 0 && (
+                <div className="text-right">
+                  <span className="text-[10px] font-black uppercase tracking-tighter" style={{ color: matchColor }}>
+                    {job.skill_match}% Skill Match
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
+          
           <div className="flex items-center flex-wrap gap-2 mt-2">
             <span className="text-xs font-semibold px-2.5 py-1 rounded-full"
               style={typeStyle[job.type] || typeStyle['Full-time']}>
@@ -125,19 +137,52 @@ function JobCard({ job, isSaved, onSave }) {
               <MdLocationOn className="text-xs" />{job.location}
             </span>
             {job.salary && <span className="text-xs text-gray-500">{job.salary}</span>}
-            <span className="text-xs text-gray-300 ml-auto">{job.posted}</span>
           </div>
-          {job.description && (
-            <button onClick={() => setExpanded(p => !p)}
-              className="mt-2 flex items-center gap-0.5 text-xs font-semibold transition-colors"
-              style={{ color: '#0f2d1a' }}>
-              {expanded ? <><MdExpandLess /> Hide details</> : <><MdExpandMore /> View details</>}
-            </button>
-          )}
+
+          <div className="flex items-center gap-3 mt-3">
+             <button onClick={() => setExpanded(p => !p)}
+                className="flex items-center gap-0.5 text-xs font-semibold transition-colors"
+                style={{ color: '#0f2d1a' }}>
+                {expanded ? <><MdExpandLess /> Hide Analysis</> : <><MdExpandMore /> View Analysis</>}
+              </button>
+              <div className="h-1 flex-1 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full transition-all" style={{ width: `${job.skill_match}%`, background: matchColor }} />
+              </div>
+          </div>
+
           {expanded && (
-            <p className="mt-2 text-xs text-gray-500 leading-relaxed border-t border-gray-50 pt-2">
-              {job.description}
-            </p>
+            <div className="mt-4 text-xs text-gray-500 leading-relaxed border-t border-gray-50 pt-4">
+              <div className="grid grid-cols-2 gap-6 mb-4">
+                <div>
+                  <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-2">Technical Fit</h4>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between">
+                      <span>Hard Skills</span>
+                      <span className="font-bold">{job.required_skills?.hard} required</span>
+                    </div>
+                    <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-blue-500" style={{ width: `${job.required_skills?.hard}%` }} />
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-2">Work Culture Fit</h4>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between">
+                      <span>Soft Skills</span>
+                      <span className="font-bold">{job.required_skills?.soft} required</span>
+                    </div>
+                    <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-emerald-500" style={{ width: `${job.required_skills?.soft}%` }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 italic mb-2">Job Description:</p>
+              <p className="text-gray-600 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                {job.description}
+              </p>
+            </div>
           )}
         </div>
       </div>

@@ -17,8 +17,6 @@ const LEVEL_STYLES = {
   'Pending Assessment': { background: '#f3f4f6', color: '#374151', dot: '#9ca3af' },
 }
 
-const COURSES = ['BSCS', 'BSIT', 'BSBA', 'BSA', 'BSEd', 'BSHM', 'BSN', 'BSCPE', 'BSECE', 'BS Entrep', 'AB Psych']
-
 function EmployabilityBadge({ level }) {
   const style = LEVEL_STYLES[level] || LEVEL_STYLES['Employable']
   return (
@@ -30,16 +28,27 @@ function EmployabilityBadge({ level }) {
   )
 }
 
-function ScoreBar({ label, value, color = '#2d6a4f' }) {
+function ScoreBar({ label, value, peerValue, color = '#2d6a4f' }) {
   const pct = Math.min(100, Math.max(0, value ?? 0))
+  const peerPct = Math.min(100, Math.max(0, peerValue ?? 0))
   return (
-    <div className="mb-2 last:mb-0">
-      <div className="flex justify-between text-xs mb-1">
-        <span className="text-gray-500">{label}</span>
-        <span className="font-semibold text-gray-700">{value != null ? value.toFixed(1) : '—'}</span>
+    <div className="mb-3 last:mb-0">
+      <div className="flex justify-between text-[10px] uppercase font-bold tracking-wider mb-1">
+        <span className="text-gray-400">{label}</span>
+        <div className="flex gap-3">
+          <span className="text-gray-700">You: {value != null ? value.toFixed(1) : '—'}</span>
+          {peerValue != null && <span className="text-emerald-600">Peer Avg: {peerValue.toFixed(1)}</span>}
+        </div>
       </div>
-      <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+      <div className="h-2 bg-gray-100 rounded-full overflow-hidden relative">
         <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
+        {peerValue != null && (
+          <div 
+            className="absolute top-0 bottom-0 w-0.5 bg-emerald-400 z-10" 
+            style={{ left: `${peerPct}%` }}
+            title={`Peer Average: ${peerValue.toFixed(1)}`}
+          />
+        )}
       </div>
     </div>
   )
@@ -59,52 +68,101 @@ function ViewInsightsModal({ userId, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.4)' }}>
-      <div className="bg-white rounded-2xl w-full max-w-xl max-h-[90vh] flex flex-col" style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+      <div className="bg-white rounded-2xl w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-base font-bold text-gray-900">Employability Insights</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
-            <MdClose className="text-lg" />
+        <div className="flex items-center justify-between px-6 py-4 bg-emerald-900 text-white">
+          <div>
+            <h2 className="text-base font-bold">Employability Insights</h2>
+            <p className="text-[10px] text-emerald-300 uppercase tracking-widest mt-0.5">Individual Driver Analysis</p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-emerald-800 transition-colors">
+            <MdClose className="text-xl" />
           </button>
         </div>
 
-        <div className="overflow-y-auto px-6 py-5 flex-1">
-          {loading && <p className="text-sm text-gray-400 text-center py-8">Loading…</p>}
+        <div className="overflow-y-auto px-6 py-6 flex-1 bg-white text-left">
+          {loading && (
+             <div className="flex flex-col items-center justify-center py-20">
+                <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="text-sm text-gray-400">Computing insights...</p>
+             </div>
+          )}
           {error && <p className="text-sm text-red-500 text-center py-8">{error}</p>}
+          
           {data && (
-            <>
+            <div className="space-y-6">
               {/* Overall score */}
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Employability Score</p>
-                <span className="text-3xl font-black" style={{ color: '#0f2d1a' }}>{data.score?.toFixed(1) ?? '—'}</span>
+              <div className="flex items-end justify-between border-b border-gray-100 pb-4">
+                <div>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Employability Score</p>
+                  <p className="text-xs text-gray-500 mt-1">Weighted composite of all features</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-4xl font-black text-emerald-900">{data.score?.toFixed(1) ?? '—'}</span>
+                  <span className="text-sm font-bold text-gray-300 ml-1">/ 100</span>
+                </div>
+              </div>
+
+              {/* Strengths & Improvements */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100">
+                  <h4 className="text-[10px] font-bold text-emerald-900 uppercase mb-3 tracking-wider">Key Strengths</h4>
+                  {data.strengths?.length > 0 ? (
+                    <div className="space-y-2">
+                      {data.strengths.map((s, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          <p className="text-xs font-bold text-emerald-800">{s.label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-emerald-600 italic">Maintaining steady performance.</p>
+                  )}
+                </div>
+                <div className="bg-orange-50 rounded-2xl p-4 border border-orange-100">
+                  <h4 className="text-[10px] font-bold text-orange-900 uppercase mb-3 tracking-wider">Growth Areas</h4>
+                  {data.improvements?.length > 0 ? (
+                    <div className="space-y-2">
+                      {data.improvements.map((s, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+                          <p className="text-xs font-bold text-orange-800">{s.label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-orange-600 italic">No major gaps identified.</p>
+                  )}
+                </div>
               </div>
 
               {/* Score breakdown */}
-              {data.score_breakdown && (
-                <div className="bg-gray-50 rounded-xl p-4 mb-5">
-                  <ScoreBar label="Avg Grade (GWA→%)" value={data.score_breakdown.avg_grade} />
-                  <ScoreBar label="Soft Skills" value={data.score_breakdown.soft_skills} color="#3b82f6" />
-                  <ScoreBar label="Hard Skills" value={data.score_breakdown.hard_skills} color="#8b5cf6" />
-                  <ScoreBar label="OJT Grade" value={data.score_breakdown.ojt_grade} color="#f59e0b" />
-                  <ScoreBar label="Prof Grade" value={data.score_breakdown.avg_prof_grade} color="#10b981" />
-                  <ScoreBar label="Elec Grade" value={data.score_breakdown.avg_elec_grade} color="#06b6d4" />
+              <div>
+                <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-4 tracking-wider">Feature Breakdown vs. Peers</h4>
+                <div className="bg-gray-50 rounded-2xl p-5 space-y-4">
+                  <ScoreBar label="Academic GWA" value={data.score_breakdown.avg_grade} peerValue={data.peer_comparison?.avg_grade} />
+                  <ScoreBar label="Soft Skills" value={data.score_breakdown.soft_skills} peerValue={data.peer_comparison?.soft_skills} color="#3b82f6" />
+                  <ScoreBar label="Hard Skills" value={data.score_breakdown.hard_skills} peerValue={data.peer_comparison?.hard_skills} color="#8b5cf6" />
+                  <ScoreBar label="OJT Performance" value={data.score_breakdown.ojt_grade} peerValue={data.peer_comparison?.ojt_grade} color="#f59e0b" />
+                  <ScoreBar label="Professional Subjects" value={data.score_breakdown.avg_prof_grade} peerValue={data.peer_comparison?.avg_prof_grade} color="#10b981" />
                 </div>
-              )}
+              </div>
 
               {/* Prediction stats for graduating students */}
               {data.is_graduating && (
-                <div className="mb-5">
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Prediction (Graduating)</p>
-                  <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-2 gap-4">
+                <div>
+                  <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-3 tracking-wider">AI Forecast (Market Readiness)</h4>
+                  <div className="bg-emerald-900 rounded-2xl p-5 grid grid-cols-2 gap-6">
                     <div>
-                      <p className="text-xs text-gray-400 mb-0.5">Predicted Months to Hire</p>
-                      <p className="text-2xl font-black" style={{ color: '#0f2d1a' }}>
-                        {data.predicted_months != null ? `${data.predicted_months} mo.` : '—'}
+                      <p className="text-[10px] text-emerald-400 uppercase font-bold mb-1">Time to Hire</p>
+                      <p className="text-2xl font-black text-white">
+                        {data.predicted_months != null ? `${data.predicted_months} Months` : '—'}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-400 mb-0.5">Employment Probability</p>
-                      <p className="text-2xl font-black" style={{ color: '#0f2d1a' }}>
+                      <p className="text-[10px] text-emerald-400 uppercase font-bold mb-1">Market Probability</p>
+                      <p className="text-2xl font-black text-white">
                         {data.rf_probability != null ? `${(data.rf_probability * 100).toFixed(0)}%` : '—'}
                       </p>
                     </div>
@@ -115,39 +173,43 @@ function ViewInsightsModal({ userId, onClose }) {
               {/* Similar alumni */}
               {data.similar_alumni?.length > 0 && (
                 <div>
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Similar Alumni</p>
-                  <div className="rounded-xl overflow-hidden border border-gray-100">
+                  <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-3 tracking-wider">Peer Path Mapping</h4>
+                  <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
                     <table className="w-full text-xs">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-3 py-2 text-left font-semibold text-gray-500">Alumni ID</th>
-                          <th className="px-3 py-2 text-left font-semibold text-gray-500">Course</th>
-                          <th className="px-3 py-2 text-center font-semibold text-gray-500">Year</th>
-                          <th className="px-3 py-2 text-center font-semibold text-gray-500">Status</th>
-                          <th className="px-3 py-2 text-center font-semibold text-gray-500">Mo. to Hire</th>
+                          <th className="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-tighter">Path</th>
+                          <th className="px-4 py-3 text-center font-bold text-gray-500 uppercase tracking-tighter">Year</th>
+                          <th className="px-4 py-3 text-center font-bold text-gray-500 uppercase tracking-tighter">Outcome</th>
+                          <th className="px-4 py-3 text-center font-bold text-gray-500 uppercase tracking-tighter">Timeline</th>
                         </tr>
                       </thead>
                       <tbody>
                         {data.similar_alumni.map((s, i) => (
-                          <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
-                            <td className="px-3 py-2 font-mono text-gray-500">{s.alumni_id}</td>
-                            <td className="px-3 py-2 font-semibold text-gray-700">{s.course}</td>
-                            <td className="px-3 py-2 text-center text-gray-500">{s.year}</td>
-                            <td className="px-3 py-2 text-center">
-                              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold"
-                                style={s.employed ? { background: '#e6ede8', color: '#0f2d1a' } : { background: '#fff7ed', color: '#ea580c' }}>
-                                {s.employed ? 'Employed' : 'Seeking'}
+                          <tr key={i} className="border-t border-gray-50 hover:bg-gray-50 transition-colors">
+                            <td className="px-4 py-3">
+                              <p className="font-bold text-gray-700">{s.course}</p>
+                              <p className="text-[10px] text-gray-400 font-mono">ID: {s.alumni_id}</p>
+                            </td>
+                            <td className="px-4 py-3 text-center text-gray-500 font-medium">{s.year}</td>
+                            <td className="px-4 py-3 text-center">
+                              <span className="px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wide"
+                                style={s.employed ? { background: '#dcfce7', color: '#166534' } : { background: '#fee2e2', color: '#991b1b' }}>
+                                {s.employed ? 'Hired' : 'Seeking'}
                               </span>
                             </td>
-                            <td className="px-3 py-2 text-center text-gray-500">{s.months != null ? `${s.months} mo.` : '—'}</td>
+                            <td className="px-4 py-3 text-center text-gray-700 font-bold">{s.months != null ? `${s.months}m` : '—'}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
+                  <p className="text-[10px] text-gray-400 mt-3 italic text-center">
+                    Paths are identified by analyzing 10+ behavioral and academic features using k-Nearest Neighbors.
+                  </p>
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
       </div>
@@ -159,9 +221,11 @@ function EditUserModal({ userId, onClose, onSaved }) {
   const [form, setForm] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [programs, setPrograms] = useState([])
 
   useEffect(() => {
     api.get(`/admin/users/${userId}`).then(r => setForm(r.data.user)).catch(() => setError('Failed to load user.'))
+    api.get('/admin/programs').then(r => setPrograms(r.data.programs || [])).catch(() => {})
   }, [userId])
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
@@ -185,7 +249,7 @@ function EditUserModal({ userId, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.4)' }}>
-      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col" style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl" >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div>
@@ -198,7 +262,7 @@ function EditUserModal({ userId, onClose, onSaved }) {
         </div>
 
         {/* Body */}
-        <div className="overflow-y-auto px-6 py-5 flex-1">
+        <div className="overflow-y-auto px-6 py-5 flex-1 text-left">
           {!form && !error && <p className="text-sm text-gray-400 text-center py-8">Loading…</p>}
           {error && <p className="text-sm text-red-500 text-center py-8">{error}</p>}
 
@@ -239,7 +303,9 @@ function EditUserModal({ userId, onClose, onSaved }) {
                 <label className={lbl}>Course</label>
                 <select className={inp} value={form.course || ''} onChange={e => set('course', e.target.value)} style={{ '--tw-ring-color': 'rgba(15,45,26,0.2)' }}>
                   <option value="">Select course</option>
-                  {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
+                  {programs.map(p => (
+                    <option key={p.code} value={p.code}>{p.code} – {p.name}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -346,31 +412,42 @@ export default function Users() {
   const [sortDir, setSortDir] = useState('asc')
   const [editingId, setEditingId] = useState(null)
   const [viewingId, setViewingId] = useState(null)
+  const [page, setPage] = useState(1)
+  const [pagination, setPagination] = useState({ page: 1, total: 0, pages: 1 })
 
   function applyUsersResponse(data) {
     setUsers(data.users || [])
     setStats(data.stats || {})
+    if (data.pagination) setPagination(data.pagination)
   }
 
   function fetchUsers(next = {}) {
     const nextSearch = next.search ?? search
     const nextFilter = next.filter ?? filter
+    const nextPage   = next.page ?? page
     setLoading(true)
-    api.get('/admin/users', { params: { search: nextSearch, filter: nextFilter } })
+    api.get('/admin/users', { params: { search: nextSearch, filter: nextFilter, page: nextPage } })
       .then(r => applyUsersResponse(r.data))
       .catch(() => {}).finally(() => setLoading(false))
   }
 
   useEffect(() => {
-    api.get('/admin/users', { params: { search: '', filter: 'All' } })
-      .then(r => applyUsersResponse(r.data))
-      .catch(() => {}).finally(() => setLoading(false))
+    fetchUsers({ page: 1 })
   }, [])
 
   useEffect(() => {
-    const timer = setTimeout(() => fetchUsers({ search }), 300)
+    const timer = setTimeout(() => {
+      setPage(1)
+      fetchUsers({ search, page: 1 })
+    }, 300)
     return () => clearTimeout(timer)
   }, [search])
+
+  function handlePageChange(next) {
+    if (next < 1 || next > pagination.pages) return
+    setPage(next)
+    fetchUsers({ page: next })
+  }
 
   function toggleStatus(user) {
     const newStatus = user.status === 'Active' ? 'Inactive' : 'Active'
@@ -433,7 +510,7 @@ export default function Users() {
         <div className="flex items-center justify-between mb-7">
           <div>
             <h1 className="text-xl font-bold text-gray-900">Users</h1>
-            <p className="text-sm text-gray-400 mt-0.5">Manage alumni accounts, predict employability, and view readiness levels</p>
+            <p className="text-sm text-gray-400 mt-0.5">Manage alumni accounts and view readiness levels</p>
           </div>
         </div>
 
@@ -492,7 +569,7 @@ export default function Users() {
         </div>
         {/* Table */}
         <div className="bg-white rounded-2xl overflow-hidden" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-          <div className="hidden lg:grid grid-cols-12 text-xs font-semibold text-gray-400 uppercase tracking-wide px-5 py-3 border-b border-gray-100">
+          <div className="hidden lg:grid grid-cols-12 text-xs font-semibold text-gray-400 uppercase tracking-wide px-5 py-3 border-b border-gray-100 text-left">
             <span className="col-span-3">User</span>
             <span className="col-span-2 flex justify-center">
               <SortableHeader label="Course" colKey="course" />
@@ -512,15 +589,22 @@ export default function Users() {
           {loading && <p className="py-12 text-center text-sm text-gray-400">Loading…</p>}
 
           {sortedUsers.map((u, i) => (
-            <div key={u.id} className="grid grid-cols-12 items-center px-5 py-3.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
+            <div key={u.id} className="grid grid-cols-12 items-center px-5 py-3.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors text-left">
               {/* User */}
               <div className="col-span-3 flex items-center gap-3">
                 <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
                   style={{ background: avatarColors[i % avatarColors.length] }}>
-                  {u.name[0]}
+                  {u.name ? u.name[0] : '?'}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-800 truncate">{u.name}</p>
+                  <p className="text-sm font-semibold text-gray-800 truncate flex items-center gap-2">
+                    {u.name}
+                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter ${
+                      u.type === 'Registered' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'
+                    }`}>
+                      {u.type || 'Registered'}
+                    </span>
+                  </p>
                   <p className="text-xs text-gray-400 truncate">{u.email}</p>
                   {u.board_passer && (
                     <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full mt-0.5"
@@ -583,6 +667,32 @@ export default function Users() {
             </div>
           )}
         </div>
+
+        {/* Pagination Controls */}
+        {pagination.pages > 1 && (
+          <div className="mt-6 flex items-center justify-between bg-white px-6 py-4 rounded-2xl border border-gray-100 shadow-sm">
+            <p className="text-xs text-gray-500 font-medium">
+              Showing page <span className="font-bold text-gray-900">{pagination.page}</span> of <span className="font-bold text-gray-900">{pagination.pages}</span> 
+              <span className="ml-2 opacity-50">({pagination.total} total students)</span>
+            </p>
+            <div className="flex gap-2">
+              <button
+                disabled={pagination.page <= 1 || loading}
+                onClick={() => handlePageChange(pagination.page - 1)}
+                className="px-4 py-2 text-xs font-bold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 disabled:opacity-30 transition-all"
+              >
+                Previous
+              </button>
+              <button
+                disabled={pagination.page >= pagination.pages || loading}
+                onClick={() => handlePageChange(pagination.page + 1)}
+                className="px-4 py-2 text-xs font-bold text-white bg-emerald-900 rounded-xl hover:opacity-90 disabled:opacity-30 transition-all"
+              >
+                Next Student Batch
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {editingId && (

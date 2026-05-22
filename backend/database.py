@@ -52,6 +52,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     salary TEXT DEFAULT '',
     description TEXT DEFAULT '',
     category TEXT DEFAULT '',
+    required_hard_skills REAL DEFAULT 60,
+    required_soft_skills REAL DEFAULT 60,
     status TEXT DEFAULT 'Open',
     posted_at TEXT DEFAULT (datetime('now'))
 );
@@ -138,6 +140,8 @@ CREATE TABLE IF NOT EXISTS ml_training_rows (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     source_name TEXT NOT NULL,
     source_row_id TEXT NOT NULL,
+    name TEXT DEFAULT '',
+    email TEXT DEFAULT '',
     course TEXT NOT NULL,
     graduation_year INTEGER NOT NULL,
     age INTEGER NOT NULL,
@@ -240,6 +244,8 @@ def init_db():
     # Migrations for existing DBs
     migrations = [
         "ALTER TABLE jobs ADD COLUMN category TEXT DEFAULT ''",
+        "ALTER TABLE jobs ADD COLUMN required_hard_skills REAL DEFAULT 60",
+        "ALTER TABLE jobs ADD COLUMN required_soft_skills REAL DEFAULT 60",
         "ALTER TABLE model_uploads ADD COLUMN sha256 TEXT DEFAULT ''",
         "ALTER TABLE model_uploads ADD COLUMN applied_to_training INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN board_passer INTEGER DEFAULT 0",
@@ -247,6 +253,8 @@ def init_db():
         "ALTER TABLE users ADD COLUMN company_id INTEGER DEFAULT NULL",
         "ALTER TABLE ml_training_rows ADD COLUMN board_passer INTEGER DEFAULT 0",
         "ALTER TABLE ml_training_rows ADD COLUMN board_exam_score REAL DEFAULT 0",
+        "ALTER TABLE ml_training_rows ADD COLUMN name TEXT DEFAULT ''",
+        "ALTER TABLE ml_training_rows ADD COLUMN email TEXT DEFAULT ''",
         "ALTER TABLE users ADD COLUMN ncae_completed INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN months_to_employment INTEGER DEFAULT NULL",
         "ALTER TABLE ml_training_rows ADD COLUMN months_to_employment INTEGER DEFAULT NULL",

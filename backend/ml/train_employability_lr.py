@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import os
 import warnings
+from typing import Optional
 
 import joblib
 from sklearn.linear_model import LinearRegression
@@ -26,7 +27,7 @@ base_dir = os.path.dirname(os.path.abspath(__file__))
 models_dir = os.path.join(base_dir, 'saved_models')
 
 
-def train_linear_employability(database_path: str | None = None) -> dict:
+def train_linear_employability(database_path: Optional[str] = None) -> dict:
     print("--- Starting ML Pipeline: Linear Regression Employability (DB Source) ---")
     df = load_training_dataframe(database_path)
     validate_training_dataframe(df)

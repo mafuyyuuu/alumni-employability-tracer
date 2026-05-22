@@ -4,6 +4,7 @@ import sqlite3
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 # graduation_year can be omitted when year_override is passed to import_training_csv
 REQUIRED_COLUMNS = [
@@ -17,6 +18,13 @@ REQUIRED_COLUMNS = [
 
 # Maps alternate column names (lowercase) → canonical name
 COLUMN_ALIASES = {
+    # name
+    'name':                     'name',
+    'full_name':                'name',
+    'alumni_name':              'name',
+    # email
+    'email':                    'email',
+    'email_address':            'email',
     # course / program
     'program':                  'course',
     # graduation year
@@ -189,6 +197,8 @@ def _derive_ojt_grade(prof_grade, internship_experience, internship_duration_mon
 
 def _map_row(row, source_row_id, current_year, year_override=None):
     course = _normalize_course(row.get('course'))
+    name = str(row.get('name') or row.get('Name') or '').strip()
+    email = str(row.get('email') or row.get('Email') or '').strip()
 
     # graduation_year: use column value if present, else fall back to year_override
     raw_year = row.get('graduation_year') or row.get('jr_grad') or ''
@@ -215,6 +225,8 @@ def _map_row(row, source_row_id, current_year, year_override=None):
 
     return {
         'source_row_id': str(source_row_id),
+        'name': name,
+        'email': email,
         'course': course,
         'graduation_year': int(graduation_year),
         'age': int(age),
@@ -266,10 +278,10 @@ def _ensure_ml_training_table(conn):
 
 
 def import_training_csv(
-    database_path: str | None = None,
-    csv_path: str | None = None,
-    source_name: str | None = None,
-    year_override: int | None = None,
+    database_path: Optional[str] = None,
+    csv_path: Optional[str] = None,
+    source_name: Optional[str] = None,
+    year_override: Optional[int] = None,
 ) -> dict:
     db_path = database_path or os.getenv('DATABASE', 'plp_alumni.db')
     dataset_path = Path(csv_path) if csv_path else Path(__file__).resolve().parent / 'data' / 'first_clean_dataset.csv'
@@ -327,6 +339,8 @@ def import_training_csv(
                 INSERT INTO ml_training_rows (
                     source_name,
                     source_row_id,
+                    name,
+                    email,
                     course,
                     graduation_year,
                     age,
@@ -340,8 +354,10 @@ def import_training_csv(
                     is_active,
                     imported_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'))
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'))
                 ON CONFLICT(source_name, source_row_id) DO UPDATE SET
+                    name = excluded.name,
+                    email = excluded.email,
                     course = excluded.course,
                     graduation_year = excluded.graduation_year,
                     age = excluded.age,
@@ -357,6 +373,8 @@ def import_training_csv(
             """, [
                 source,
                 mapped['source_row_id'],
+                mapped['name'],
+                mapped['email'],
                 mapped['course'],
                 mapped['graduation_year'],
                 mapped['age'],
@@ -400,8 +418,8 @@ def import_training_csv(
 
 
 def import_first_clean_dataset(
-    database_path: str | None = None,
-    csv_path: str | None = None,
+    database_path: Optional[str] = None,
+    csv_path: Optional[str] = None,
     source_name: str = 'first_clean_dataset.csv',
 ) -> dict:
     """Backward-compatible wrapper for legacy first_clean_dataset imports."""
