@@ -11,6 +11,7 @@ export default function ProfileSettings() {
     email: '', age: '',
     degree: '', avgGrade: '', avgProfGrade: '',
     avgElecGrade: '', ojtGrade: '', softSkills: '', hardSkills: '',
+    monthsToEmployment: '',
   })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -24,6 +25,7 @@ export default function ProfileSettings() {
         degree: p.degree || '', avgGrade: p.avgGrade || '',
         avgProfGrade: p.avgProfGrade || '', avgElecGrade: p.avgElecGrade || '',
         ojtGrade: p.ojtGrade || '', softSkills: p.softSkills || '', hardSkills: p.hardSkills || '',
+        monthsToEmployment: p.monthsToEmployment != null ? String(p.monthsToEmployment) : '',
       })
     }).catch(() => {})
   }, [])
@@ -122,9 +124,25 @@ export default function ProfileSettings() {
             <Field name="avgElecGrade" label="Elective Grade Avg" type="number" step="0.01" />
             <Field name="ojtGrade" label="OJT Grade" type="number" step="0.01" />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <Field name="softSkills" label="Soft Skills Average" type="number" step="0.01" />
             <Field name="hardSkills" label="Hard Skills Average" type="number" step="0.01" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">
+                Months to First Employment
+              </label>
+              <input
+                type="number" min="0" max="120"
+                placeholder="e.g. 3 (months after graduation)"
+                value={form.monthsToEmployment}
+                onChange={e => setForm(f => ({ ...f, monthsToEmployment: e.target.value }))}
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2"
+                style={{ '--tw-ring-color': 'rgba(15,45,26,0.2)' }}
+              />
+              <p className="text-xs text-gray-400 mt-1">How many months after graduation did you find your first job?</p>
+            </div>
           </div>
 
           <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">

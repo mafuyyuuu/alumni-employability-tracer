@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS users (
     board_passer INTEGER DEFAULT 0,
     board_exam_score REAL DEFAULT 0,
     company_id INTEGER DEFAULT NULL,
+    months_to_employment INTEGER DEFAULT NULL,
     created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -148,6 +149,7 @@ CREATE TABLE IF NOT EXISTS ml_training_rows (
     hard_skills REAL NOT NULL,
     board_passer INTEGER DEFAULT 0,
     board_exam_score REAL DEFAULT 0,
+    months_to_employment INTEGER DEFAULT NULL,
     employed INTEGER NOT NULL,
     is_active INTEGER DEFAULT 1,
     imported_at TEXT DEFAULT (datetime('now')),
@@ -246,6 +248,8 @@ def init_db():
         "ALTER TABLE ml_training_rows ADD COLUMN board_passer INTEGER DEFAULT 0",
         "ALTER TABLE ml_training_rows ADD COLUMN board_exam_score REAL DEFAULT 0",
         "ALTER TABLE users ADD COLUMN ncae_completed INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN months_to_employment INTEGER DEFAULT NULL",
+        "ALTER TABLE ml_training_rows ADD COLUMN months_to_employment INTEGER DEFAULT NULL",
     ]
     for m in migrations:
         try:

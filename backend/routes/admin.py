@@ -390,11 +390,24 @@ def dashboard():
         "SELECT COUNT(*) as cnt FROM users WHERE role = 'alumni'"
     ).fetchone()['cnt']
 
+    # Exclude graduating-year alumni (still job-hunting) from the employment rate
+    latest_yr = db.execute(
+        "SELECT MAX(graduation_year) AS my FROM ml_training_rows WHERE is_active=1"
+    ).fetchone()['my']
+
     employed_count = db.execute(
-        "SELECT COUNT(*) as cnt FROM users WHERE role = 'alumni' AND employed = 1"
+        "SELECT COUNT(*) as cnt FROM users WHERE role='alumni' AND employed=1"
+        + (" AND graduation_year != ?" if latest_yr else ""),
+        [latest_yr] if latest_yr else []
     ).fetchone()['cnt']
 
-    employment_rate = round(employed_count / total_alumni * 100, 1) if total_alumni > 0 else 69.6
+    non_graduating = db.execute(
+        "SELECT COUNT(*) as cnt FROM users WHERE role='alumni'"
+        + (" AND graduation_year != ?" if latest_yr else ""),
+        [latest_yr] if latest_yr else []
+    ).fetchone()['cnt']
+
+    employment_rate = round(employed_count / non_graduating * 100, 1) if non_graduating > 0 else 69.6
 
     # Historical employment data
     emp_rows = db.execute(
@@ -421,11 +434,16 @@ def dashboard():
         if isinstance(mape, (int, float)):
             margin_of_error = round(float(mape), 1)
 
+    # Year-over-year change from historical data
+    emp_change = 0.0
+    if len(emp_rows) >= 2:
+        emp_change = round(emp_rows[-1]['overall_rate'] - emp_rows[-2]['overall_rate'], 1)
+
     return jsonify({
         'metrics': {
             'total_alumni': total_alumni,
             'employment_rate': employment_rate,
-            'employment_rate_change': 4.6,
+            'employment_rate_change': emp_change,
             'graduate_success': 97.5,
             'margin_of_error': margin_of_error,
         },
@@ -440,55 +458,176 @@ def dashboard():
 @admin_required
 def list_users():
     db = get_db()
-    search = request.args.get('search', '').lower()
+    search    = request.args.get('search', '').lower()
     filter_by = request.args.get('filter', 'All')
 
-    # Always fetch all alumni for accurate totals
     all_rows = db.execute("SELECT * FROM users WHERE role = 'alumni'").fetchall()
 
+    SCORE_THRESHOLD = 50  # high score ≥ 50
+    FAST_MONTHS     = 6   # fast employment ≤ 6 months
+
+    # Latest uploaded dataset year = graduating students reference year
+    lr = db.execute(
+        "SELECT MAX(graduation_year) AS my FROM ml_training_rows WHERE is_active=1"
+    ).fetchone()
+    LATEST_YEAR = lr['my'] if (lr and lr['my']) else None
+
+    # ── Historical k-NN data (employed alumni from training set with known months) ──
+    hist_rows = db.execute("""
+        SELECT course, avg_grade, soft_skills, hard_skills,
+               ojt_grade, avg_prof_grade, avg_elec_grade, months_to_employment
+        FROM ml_training_rows
+        WHERE is_active=1 AND employed=1 AND months_to_employment IS NOT NULL
+    """).fetchall()
+
+    # Group by course for faster lookup
+    _hist_by_course = {}
+    for h in hist_rows:
+        c = (h['course'] or '').upper().strip()
+        _hist_by_course.setdefault(c, []).append(h)
+
+    def _norm_gwa(g):
+        g = float(g or 0)
+        return round((5.0 - g) / 4.0 * 100, 1) if 0 < g <= 5.0 else g
+
+    def _feats(r):
+        return [
+            _norm_gwa(r['avg_grade']),
+            float(r['soft_skills']    or 0),
+            float(r['hard_skills']    or 0),
+            float(r['ojt_grade']      or 0),
+            float(r['avg_prof_grade'] or 0),
+            float(r['avg_elec_grade'] or 0),
+        ]
+
+    def _knn_months(r, k=10):
+        """Predict months-to-employment via k-NN against historical employed alumni."""
+        course = (r['course'] or '').upper().strip()
+        pool   = _hist_by_course.get(course) or list(hist_rows)
+        if len(pool) < k:
+            pool = list(hist_rows)
+
+        uf = _feats(r)
+        dists = sorted(
+            ((sum((a - float(h[col] or 0)) ** 2
+                  for a, col in zip(uf, ['avg_grade','soft_skills','hard_skills',
+                                         'ojt_grade','avg_prof_grade','avg_elec_grade'])) ** 0.5,
+              int(h['months_to_employment']))
+             for h in pool),
+            key=lambda x: x[0]
+        )[:k]
+
+        if not dists:
+            return None
+        total_w  = sum(1.0 / (d + 1e-6) for d, _ in dists)
+        predicted = sum(m / (d + 1e-6) for d, m in dists) / total_w
+        return round(predicted)
+
     def _employability_score(r):
-        avg_g = float(r['avg_grade'] or 0)
+        avg_g = _norm_gwa(r['avg_grade'])
         soft  = float(r['soft_skills'] or 0)
         hard  = float(r['hard_skills'] or 0)
-        ojt   = float(r['ojt_grade'] or 0)
-        board = float(r['board_passer'] if 'board_passer' in r.keys() else 0)
-        score = avg_g * 0.35 + ojt * 0.20 + soft * 0.15 + hard * 0.15 + board * 15
-        return round(min(score, 100), 1)
+        ojt   = float(r['ojt_grade']   or 0)
+        keys  = r.keys() if hasattr(r, 'keys') else []
+        board = float(r['board_passer'] if 'board_passer' in keys else 0)
+        return round(min(avg_g * 0.35 + ojt * 0.20 + soft * 0.15 + hard * 0.15 + board * 15, 100), 1)
 
-    def _employability_level(r, score):
-        # Alumni with no NCAE results yet cannot be fairly classified
-        soft = float(r['soft_skills'] or 0)
-        hard = float(r['hard_skills'] or 0)
-        ncae_done = soft > 0 or hard > 0
-        keys = r.keys() if hasattr(r, 'keys') else {}
+    def _tier(high_score, fast_months):
+        """2×2 matrix → 3 tiers.
+           high+fast → Likely Employable
+           high+slow or low+fast → Employable
+           low+slow  → Least Employable
+        """
+        if high_score and fast_months:         return 'Likely Employable'
+        if not high_score and not fast_months: return 'Least Employable'
+        return 'Employable'
+
+    def _rf_prob(r):
+        """Run RF model and return probability_employed (0-1), or None on failure."""
+        try:
+            result = ml_predictor.predict_details({
+                'avg_grade':      float(r['avg_grade']      or 0),
+                'avg_prof_grade': float(r['avg_prof_grade'] or 0),
+                'avg_elec_grade': float(r['avg_elec_grade'] or 0),
+                'ojt_grade':      float(r['ojt_grade']      or 0),
+                'soft_skills':    float(r['soft_skills']    or 0),
+                'hard_skills':    float(r['hard_skills']    or 0),
+                'age':            int(r['age']              or 22),
+                'graduation_year': int(r['graduation_year'] or 2023),
+                'course':         r['course'] or '',
+            }, model='rf')
+            p = result.get('probability_employed')
+            return float(p) if p is not None else None
+        except Exception:
+            return None
+
+    def _employability_level(r, pred_months=None, rf_probability=None):
+        keys      = r.keys() if hasattr(r, 'keys') else []
+        soft      = float(r['soft_skills'] or 0)
+        hard      = float(r['hard_skills'] or 0)
         ncae_flag = bool(r['ncae_completed']) if 'ncae_completed' in keys else False
-        if not ncae_done and not ncae_flag:
+        if not ncae_flag and soft == 0 and hard == 0:
             return 'Pending Assessment'
-        return 'Likely Employable' if score >= 50 else 'Least Employable'
 
-    all_users = [{
-        'id': r['id'],
-        'name': f"{r['first_name']} {r['last_name']}",
-        'email': r['email'],
-        'course': r['course'],
-        'year': r['graduation_year'],
-        'status': r['account_status'],
-        'employed': bool(r['employed']),
-        'board_passer': bool(r['board_passer']) if 'board_passer' in r.keys() else False,
-        'board_exam_score': float(r['board_exam_score']) if 'board_exam_score' in r.keys() else 0.0,
-        'employability_score': _employability_score(r),
-        'employability_level': _employability_level(r, _employability_score(r)),
-    } for r in all_rows]
+        score     = _employability_score(r)
+        employed  = bool(r['employed'])
+        months    = r['months_to_employment'] if 'months_to_employment' in keys else None
+        grad_year = r['graduation_year']       if 'graduation_year'       in keys else None
 
-    # Stats always reflect full alumni pool
+        # For graduating students: combine RF probability + k-NN months + score
+        # RF gates whether they can reach "Likely Employable" at all
+        if LATEST_YEAR and grad_year == LATEST_YEAR and not employed:
+            rf_p      = rf_probability if rf_probability is not None else 0.5
+            # high_score requires BOTH a good feature score AND RF says likely employed
+            high_s    = score >= SCORE_THRESHOLD and rf_p >= 0.5
+            fast_m    = pred_months is not None and pred_months <= FAST_MONTHS
+            return _tier(high_s, fast_m)
+
+        # Historical employed alumni — use actual months + score
+        if employed:
+            high_s = score >= SCORE_THRESHOLD
+            m      = int(months) if months is not None else None
+            if m is None:
+                return 'Likely Employable' if high_s else 'Employable'
+            return _tier(high_s, m <= FAST_MONTHS)
+
+        # Older unemployed alumni — score-only fallback
+        return 'Likely Employable' if score >= SCORE_THRESHOLD else 'Least Employable'
+
+    # Build user list — run k-NN + RF for graduating-year unemployed users
+    all_users = []
+    for r in all_rows:
+        employed  = bool(r['employed'])
+        grad_year = r['graduation_year']
+        is_grad   = bool(LATEST_YEAR and grad_year == LATEST_YEAR and not employed)
+        pred_months  = _knn_months(r) if is_grad else None
+        rf_probability = _rf_prob(r)  if is_grad else None
+
+        all_users.append({
+            'id':                  r['id'],
+            'name':                f"{r['first_name']} {r['last_name']}",
+            'email':               r['email'],
+            'course':              r['course'],
+            'year':                grad_year,
+            'status':              r['account_status'],
+            'employed':            employed,
+            'board_passer':        bool(r['board_passer']) if 'board_passer' in r.keys() else False,
+            'board_exam_score':    float(r['board_exam_score']) if 'board_exam_score' in r.keys() else 0.0,
+            'months_to_employment': r['months_to_employment'] if 'months_to_employment' in r.keys() else None,
+            'predicted_months':    pred_months,
+            'rf_probability':      round(rf_probability, 3) if rf_probability is not None else None,
+            'is_graduating':       is_grad,
+            'employability_score': _employability_score(r),
+            'employability_level': _employability_level(r, pred_months, rf_probability),
+        })
+
     stats = {
-        'total': len(all_users),
-        'active': sum(1 for u in all_users if u['status'] == 'Active'),
-        'employed': sum(1 for u in all_users if u['employed']),
+        'total':      len(all_users),
+        'active':     sum(1 for u in all_users if u['status'] == 'Active'),
+        'employed':   sum(1 for u in all_users if u['employed']),
         'unemployed': sum(1 for u in all_users if not u['employed']),
     }
 
-    # Apply filter tab
     users = all_users
     if filter_by == 'Active':
         users = [u for u in users if u['status'] == 'Active']
@@ -497,31 +636,232 @@ def list_users():
     elif filter_by == 'Unemployed':
         users = [u for u in users if not u['employed']]
 
-    # Apply search on top of filter
     if search:
         users = [u for u in users if search in u['name'].lower() or search in u['email'].lower()]
 
-    return jsonify({'users': users, 'stats': stats}), 200
+    return jsonify({'users': users, 'stats': stats, 'latest_year': LATEST_YEAR}), 200
 
 
-@admin_bp.route('/users/<int:user_id>', methods=['PUT'])
+@admin_bp.route('/fill-pending-skills', methods=['POST'])
 @admin_required
-def update_user(user_id):
-    data = request.get_json()
+def fill_pending_skills():
+    """Fill hard_skills/soft_skills for alumni who haven't completed NCAE using dataset averages."""
+    db = get_db()
+    pending = db.execute("""
+        SELECT u.id, u.course, u.graduation_year
+        FROM users u
+        WHERE u.role = 'alumni'
+          AND (u.ncae_completed = 0 OR u.ncae_completed IS NULL)
+          AND (u.soft_skills = 0 OR u.soft_skills IS NULL)
+          AND (u.hard_skills = 0 OR u.hard_skills IS NULL)
+    """).fetchall()
+
+    filled = 0
+    for pu in pending:
+        uid, course, grad_year = pu['id'], pu['course'], pu['graduation_year']
+        row = db.execute("""
+            SELECT AVG(soft_skills) AS avg_soft, AVG(hard_skills) AS avg_hard
+            FROM ml_training_rows
+            WHERE is_active = 1 AND course = ? AND graduation_year = ?
+        """, [course, grad_year]).fetchone()
+
+        avg_soft = row['avg_soft'] if row else None
+        avg_hard = row['avg_hard'] if row else None
+
+        if avg_soft is None:
+            row = db.execute("""
+                SELECT AVG(soft_skills) AS avg_soft, AVG(hard_skills) AS avg_hard
+                FROM ml_training_rows WHERE is_active = 1 AND course = ?
+            """, [course]).fetchone()
+            avg_soft = row['avg_soft'] if row else None
+            avg_hard = row['avg_hard'] if row else None
+
+        if avg_soft is not None and avg_hard is not None:
+            db.execute(
+                "UPDATE users SET soft_skills = ?, hard_skills = ? WHERE id = ?",
+                [round(float(avg_soft), 2), round(float(avg_hard), 2), uid]
+            )
+            filled += 1
+
+    db.commit()
+    return jsonify({'filled': filled, 'pending_total': len(pending)}), 200
+
+
+@admin_bp.route('/users/<int:user_id>', methods=['GET', 'PUT'])
+@admin_required
+def manage_user(user_id):
     db = get_db()
 
-    if 'status' in data:
-        db.execute(
-            'UPDATE users SET account_status = ? WHERE id = ?',
-            [data['status'], user_id]
-        )
-    if 'employed' in data:
-        db.execute(
-            'UPDATE users SET employed = ? WHERE id = ?',
-            [int(data['employed']), user_id]
-        )
-    db.commit()
+    if request.method == 'GET':
+        u = db.execute('SELECT * FROM users WHERE id = ?', [user_id]).fetchone()
+        if not u:
+            return jsonify({'error': 'User not found'}), 404
+        return jsonify({'user': {
+            'id': u['id'],
+            'firstName': u['first_name'],
+            'middleName': u['middle_name'] or '',
+            'lastName': u['last_name'],
+            'email': u['email'],
+            'course': u['course'] or '',
+            'graduationYear': u['graduation_year'],
+            'age': u['age'],
+            'employed': bool(u['employed']),
+            'monthsToEmployment': u['months_to_employment'],
+            'avgGrade': u['avg_grade'],
+            'avgProfGrade': u['avg_prof_grade'],
+            'avgElecGrade': u['avg_elec_grade'],
+            'ojtGrade': u['ojt_grade'],
+            'softSkills': u['soft_skills'],
+            'hardSkills': u['hard_skills'],
+            'boardPasser': bool(u['board_passer']),
+            'boardExamScore': u['board_exam_score'],
+            'status': u['account_status'],
+        }}), 200
+
+    # PUT
+    data = request.get_json()
+
+    allowed = {
+        'firstName':          ('first_name',             str),
+        'middleName':         ('middle_name',             str),
+        'lastName':           ('last_name',              str),
+        'email':              ('email',                  str),
+        'course':             ('course',                 str),
+        'graduationYear':     ('graduation_year',        int),
+        'age':                ('age',                    int),
+        'employed':           ('employed',               lambda v: int(bool(v))),
+        'monthsToEmployment': ('months_to_employment',   lambda v: int(v) if v not in (None, '') else None),
+        'avgGrade':           ('avg_grade',              float),
+        'avgProfGrade':       ('avg_prof_grade',         float),
+        'avgElecGrade':       ('avg_elec_grade',         float),
+        'ojtGrade':           ('ojt_grade',              float),
+        'softSkills':         ('soft_skills',            float),
+        'hardSkills':         ('hard_skills',            float),
+        'boardPasser':        ('board_passer',           lambda v: int(bool(v))),
+        'boardExamScore':     ('board_exam_score',       float),
+        'status':             ('account_status',         str),
+    }
+
+    sets, vals = [], []
+    for key, (col, cast) in allowed.items():
+        if key in data:
+            try:
+                val = cast(data[key]) if data[key] not in (None, '') else None
+            except (ValueError, TypeError):
+                val = None
+            sets.append(f'{col} = ?')
+            vals.append(val)
+
+    if sets:
+        vals.append(user_id)
+        db.execute(f"UPDATE users SET {', '.join(sets)} WHERE id = ?", vals)
+        db.commit()
+
     return jsonify({'message': 'User updated'}), 200
+
+
+@admin_bp.route('/user-insights/<int:user_id>', methods=['GET'])
+@admin_required
+def user_insights(user_id):
+    db  = get_db()
+    u   = db.execute('SELECT * FROM users WHERE id=?', [user_id]).fetchone()
+    if not u:
+        return jsonify({'error': 'Not found'}), 404
+
+    SCORE_THRESHOLD = 50
+    FAST_MONTHS     = 6
+
+    lr = db.execute(
+        "SELECT MAX(graduation_year) AS my FROM ml_training_rows WHERE is_active=1"
+    ).fetchone()
+    LATEST_YEAR = lr['my'] if (lr and lr['my']) else None
+
+    def _norm_gwa(g):
+        g = float(g or 0)
+        return round((5.0 - g) / 4.0 * 100, 1) if 0 < g <= 5.0 else g
+
+    avg_g  = _norm_gwa(u['avg_grade'])
+    soft   = float(u['soft_skills']    or 0)
+    hard   = float(u['hard_skills']    or 0)
+    ojt    = float(u['ojt_grade']      or 0)
+    prof   = float(u['avg_prof_grade'] or 0)
+    elec   = float(u['avg_elec_grade'] or 0)
+    board  = float(u['board_passer']   or 0)
+    score  = round(min(avg_g*0.35 + ojt*0.20 + soft*0.15 + hard*0.15 + board*15, 100), 1)
+
+    user_feats = [avg_g, soft, hard, ojt, prof, elec]
+    feat_cols  = ['avg_grade','soft_skills','hard_skills','ojt_grade','avg_prof_grade','avg_elec_grade']
+
+    is_graduating = (LATEST_YEAR and u['graduation_year'] == LATEST_YEAR and not bool(u['employed']))
+
+    # k-NN: find 10 most similar historical employed alumni
+    course = (u['course'] or '').upper().strip()
+    hist_pool = db.execute("""
+        SELECT source_row_id, course, graduation_year, employed, months_to_employment,
+               avg_grade, soft_skills, hard_skills, ojt_grade, avg_prof_grade, avg_elec_grade
+        FROM ml_training_rows
+        WHERE is_active=1 AND employed=1 AND months_to_employment IS NOT NULL
+          AND course = ?
+    """, [course]).fetchall()
+    if len(hist_pool) < 10:
+        hist_pool = db.execute("""
+            SELECT source_row_id, course, graduation_year, employed, months_to_employment,
+                   avg_grade, soft_skills, hard_skills, ojt_grade, avg_prof_grade, avg_elec_grade
+            FROM ml_training_rows
+            WHERE is_active=1 AND employed=1 AND months_to_employment IS NOT NULL
+        """).fetchall()
+
+    dists = sorted(
+        [(sum((a - float(h[c] or 0))**2 for a, c in zip(user_feats, feat_cols))**0.5, h)
+         for h in hist_pool],
+        key=lambda x: x[0]
+    )[:5]
+
+    similar = []
+    total_w = sum(1.0/(d+1e-6) for d, _ in dists)
+    pred_months = round(sum(int(h['months_to_employment'])/(d+1e-6) for d, h in dists) / total_w) if dists else None
+
+    for dist, h in dists:
+        similar.append({
+            'alumni_id': h['source_row_id'] or '—',
+            'course':    h['course'],
+            'year':      h['graduation_year'],
+            'employed':  bool(h['employed']),
+            'months':    int(h['months_to_employment']) if h['months_to_employment'] else None,
+            'distance':  round(dist, 2),
+        })
+
+    # RF probability
+    rf_prob = None
+    try:
+        res = ml_predictor.predict_details({
+            'avg_grade': float(u['avg_grade'] or 0), 'avg_prof_grade': float(u['avg_prof_grade'] or 0),
+            'avg_elec_grade': float(u['avg_elec_grade'] or 0), 'ojt_grade': float(u['ojt_grade'] or 0),
+            'soft_skills': float(u['soft_skills'] or 0), 'hard_skills': float(u['hard_skills'] or 0),
+            'age': int(u['age'] or 22), 'graduation_year': int(u['graduation_year'] or 2023),
+            'course': u['course'] or '',
+        }, model='rf')
+        p = res.get('probability_employed')
+        rf_prob = round(float(p), 3) if p is not None else None
+    except Exception:
+        pass
+
+    return jsonify({
+        'score': score,
+        'score_breakdown': {
+            'avg_grade':      round(avg_g, 1),
+            'soft_skills':    round(soft, 1),
+            'hard_skills':    round(hard, 1),
+            'ojt_grade':      round(ojt, 1),
+            'avg_prof_grade': round(prof, 1),
+            'avg_elec_grade': round(elec, 1),
+        },
+        'predicted_months': pred_months,
+        'rf_probability':   rf_prob,
+        'is_graduating':    is_graduating,
+        'employability_level': 'N/A',
+        'similar_alumni':   similar,
+    }), 200
 
 
 # ── Forecasting ────────────────────────────────────────────────────────────

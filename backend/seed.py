@@ -16,46 +16,50 @@ def seed():
     c = conn.cursor()
 
     # ── Users (insert per email — safe to re-run) ──────────────────────
+    # Columns: first_name, middle_name, last_name, email, password_hash, role,
+    #          course, graduation_year, age, employed, account_status,
+    #          avg_grade, avg_prof_grade, avg_elec_grade, ojt_grade, soft_skills, hard_skills,
+    #          months_to_employment (NULL = unemployed or unknown)
     users = [
         ('Admin', '', 'PLP', 'admin@plp.edu.ph', hash_pw('admin123'), 'admin',
-         '', 2020, 30, 1, 'Active', 0, 0, 0, 0, 0, 0),
+         '', 2020, 30, 1, 'Active', 0, 0, 0, 0, 0, 0, None),
         # BSCS
         ('Juan', 'D.', 'Cruz', 'juan@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSCS', 2022, 25, 1, 'Active', 90.0, 88.0, 87.0, 91.0, 80.0, 63.0),
+         'BSCS', 2022, 25, 1, 'Active', 90.0, 88.0, 87.0, 91.0, 80.0, 63.0, 3),
         ('Carlos', '', 'Villanueva', 'carlos@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSCS', 2021, 26, 1, 'Active', 92.0, 90.0, 89.0, 93.0, 83.0, 68.0),
+         'BSCS', 2021, 26, 1, 'Active', 92.0, 90.0, 89.0, 93.0, 83.0, 68.0, 4),
         # BSIT
         ('Maria', '', 'Santos', 'maria@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSIT', 2023, 23, 1, 'Active', 85.0, 84.0, 82.0, 88.0, 75.0, 70.0),
+         'BSIT', 2023, 23, 1, 'Active', 85.0, 84.0, 82.0, 88.0, 75.0, 70.0, 2),
         ('Ramon', '', 'Dela Cruz', 'ramon@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSIT', 2022, 24, 1, 'Active', 83.0, 81.0, 80.0, 85.0, 73.0, 67.0),
+         'BSIT', 2022, 24, 1, 'Active', 83.0, 81.0, 80.0, 85.0, 73.0, 67.0, 5),
         # BSEd
         ('Pedro', '', 'Reyes', 'pedro@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSEd', 2021, 26, 0, 'Active', 78.0, 76.0, 77.0, 80.0, 72.0, 55.0),
+         'BSEd', 2021, 26, 0, 'Active', 78.0, 76.0, 77.0, 80.0, 72.0, 55.0, None),
         ('Liza', '', 'Navarro', 'liza@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSEd', 2023, 23, 1, 'Active', 82.0, 80.0, 81.0, 84.0, 74.0, 57.0),
+         'BSEd', 2023, 23, 1, 'Active', 82.0, 80.0, 81.0, 84.0, 74.0, 57.0, 8),
         # BSBA
         ('Ana', '', 'Gonzales', 'ana@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSBA', 2022, 25, 1, 'Active', 88.0, 85.0, 86.0, 89.0, 78.0, 60.0),
+         'BSBA', 2022, 25, 1, 'Active', 88.0, 85.0, 86.0, 89.0, 78.0, 60.0, 4),
         ('Sofia', '', 'Ramos', 'sofia@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSBA', 2023, 23, 1, 'Active', 86.0, 83.0, 84.0, 87.0, 76.0, 58.0),
+         'BSBA', 2023, 23, 1, 'Active', 86.0, 83.0, 84.0, 87.0, 76.0, 58.0, 7),
         # BSA
         ('Jose', '', 'Mendoza', 'jose@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSA', 2020, 27, 0, 'Inactive', 72.0, 70.0, 71.0, 75.0, 65.0, 50.0),
+         'BSA', 2020, 27, 0, 'Inactive', 72.0, 70.0, 71.0, 75.0, 65.0, 50.0, None),
         ('Cris', '', 'Bautista', 'cris@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSA', 2022, 25, 1, 'Active', 84.0, 82.0, 83.0, 86.0, 75.0, 62.0),
+         'BSA', 2022, 25, 1, 'Active', 84.0, 82.0, 83.0, 86.0, 75.0, 62.0, 6),
         # BSHM
         ('Rosa', '', 'Aquino', 'rosa@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSHM', 2023, 23, 1, 'Active', 86.0, 84.0, 85.0, 87.0, 76.0, 62.0),
+         'BSHM', 2023, 23, 1, 'Active', 86.0, 84.0, 85.0, 87.0, 76.0, 62.0, 3),
         ('Marco', '', 'Ferrer', 'marco@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSHM', 2022, 24, 0, 'Active', 80.0, 78.0, 79.0, 82.0, 71.0, 58.0),
+         'BSHM', 2022, 24, 0, 'Active', 80.0, 78.0, 79.0, 82.0, 71.0, 58.0, None),
         # BSN (College of Nursing)
         ('Lea', '', 'Morales', 'lea@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSN', 2023, 23, 1, 'Active', 88.0, 86.0, 85.0, 89.0, 77.0, 65.0),
+         'BSN', 2023, 23, 1, 'Active', 88.0, 86.0, 85.0, 89.0, 77.0, 65.0, 2),
         ('Nilo', '', 'Batungbakal', 'nilo@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSN', 2022, 24, 0, 'Active', 80.0, 78.0, 79.0, 82.0, 71.0, 58.0),
+         'BSN', 2022, 24, 0, 'Active', 80.0, 78.0, 79.0, 82.0, 71.0, 58.0, None),
         ('Grace', '', 'Tolentino', 'grace@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSN', 2021, 26, 1, 'Active', 85.0, 83.0, 84.0, 87.0, 74.0, 61.0),
+         'BSN', 2021, 26, 1, 'Active', 85.0, 83.0, 84.0, 87.0, 74.0, 61.0, 5),
     ]
 
     for user in users:
@@ -64,9 +68,16 @@ def seed():
             c.execute("""
                 INSERT INTO users (first_name, middle_name, last_name, email, password_hash,
                     role, course, graduation_year, age, employed, account_status,
-                    avg_grade, avg_prof_grade, avg_elec_grade, ojt_grade, soft_skills, hard_skills)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    avg_grade, avg_prof_grade, avg_elec_grade, ojt_grade, soft_skills, hard_skills,
+                    months_to_employment)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, user)
+        else:
+            # Backfill months_to_employment for existing seed users that don't have it
+            c.execute("""
+                UPDATE users SET months_to_employment = ?
+                WHERE email = ? AND months_to_employment IS NULL AND employed = 1
+            """, [user[17], user[3]])
 
     # ── Companies ──────────────────────────────────────────────────────
     companies = [
@@ -298,7 +309,16 @@ def seed():
                 VALUES (?,?,?,?,?,'Active')
             """, prog)
 
-    # ── NCAE Questions ────────────────────────────────────────────────
+    # ── NCAE Questions (self-rating format) ──────────────────────────
+    # Detect old multiple-choice format by checking if option_a has real content
+    c.execute("SELECT COUNT(*) FROM ncae_questions WHERE length(option_a) > 3")
+    old_format_count = c.fetchone()[0]
+    if old_format_count > 0:
+        # Old MCQ format found — wipe and re-seed with new self-rating format
+        c.execute("DELETE FROM ncae_questions")
+        c.execute("DELETE FROM ncae_results")
+        print("Cleared old MCQ format NCAE questions. Re-seeding with self-rating format.")
+
     c.execute("SELECT COUNT(*) FROM ncae_questions")
     if c.fetchone()[0] == 0:
         try:
@@ -309,11 +329,55 @@ def seed():
                         INSERT OR IGNORE INTO ncae_questions
                         (program, question_num, question, option_a, option_b, option_c, option_d, correct_answer, category)
                         VALUES (?,?,?,?,?,?,?,?,?)
-                    """, [program, q['num'], q['question'], q['a'], q['b'], q['c'], q['d'],
-                          q['answer'], q['category']])
-            print("NCAE questions seeded.")
+                    """, [program, q['num'], q['statement'], '', '', '', '', '', q['category']])
+            print("NCAE self-rating questions seeded.")
         except Exception as e:
             print(f"NCAE seed skipped: {e}")
+
+    # ── Fill pending skills from ml_training_rows averages ───────────────
+    # For alumni who haven't completed NCAE and have no skills data,
+    # fill soft_skills and hard_skills using program/year averages from training data.
+    c.execute("""
+        SELECT u.id, u.course, u.graduation_year
+        FROM users u
+        WHERE u.role = 'alumni'
+          AND (u.ncae_completed = 0 OR u.ncae_completed IS NULL)
+          AND (u.soft_skills = 0 OR u.soft_skills IS NULL)
+          AND (u.hard_skills = 0 OR u.hard_skills IS NULL)
+    """)
+    pending_users = c.fetchall()
+
+    filled = 0
+    for pu in pending_users:
+        uid, course, grad_year = pu[0], pu[1], pu[2]
+        # Try exact match first (same course + year), then just course
+        c.execute("""
+            SELECT AVG(soft_skills) AS avg_soft, AVG(hard_skills) AS avg_hard
+            FROM ml_training_rows
+            WHERE is_active = 1 AND course = ? AND graduation_year = ?
+        """, [course, grad_year])
+        row = c.fetchone()
+        avg_soft = row[0]
+        avg_hard = row[1]
+
+        if avg_soft is None:
+            # Fall back to course-wide average
+            c.execute("""
+                SELECT AVG(soft_skills) AS avg_soft, AVG(hard_skills) AS avg_hard
+                FROM ml_training_rows WHERE is_active = 1 AND course = ?
+            """, [course])
+            row = c.fetchone()
+            avg_soft = row[0]
+            avg_hard = row[1]
+
+        if avg_soft is not None and avg_hard is not None:
+            c.execute("""
+                UPDATE users SET soft_skills = ?, hard_skills = ? WHERE id = ?
+            """, [round(float(avg_soft), 2), round(float(avg_hard), 2), uid])
+            filled += 1
+
+    if filled > 0:
+        print(f"Filled skills data for {filled} pending alumni from dataset averages.")
 
     conn.commit()
     conn.close()

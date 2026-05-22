@@ -35,6 +35,7 @@ def get_profile():
             'boardPasser': bool(user['board_passer']) if 'board_passer' in keys else False,
             'boardExamScore': float(user['board_exam_score']) if 'board_exam_score' in keys else 0.0,
             'ncaeCompleted': bool(user['ncae_completed']) if 'ncae_completed' in keys else False,
+            'monthsToEmployment': user['months_to_employment'] if 'months_to_employment' in keys else None,
         }
     }), 200
 
@@ -46,18 +47,27 @@ def update_profile():
     data = request.get_json()
     db = get_db()
 
+    months = data.get('monthsToEmployment')
+    if months is not None:
+        try:
+            months = int(months)
+        except (ValueError, TypeError):
+            months = None
+
     db.execute("""
         UPDATE users SET
             first_name = ?, middle_name = ?, last_name = ?,
             age = ?, course = ?,
             avg_grade = ?, avg_prof_grade = ?, avg_elec_grade = ?,
-            ojt_grade = ?, soft_skills = ?, hard_skills = ?
+            ojt_grade = ?, soft_skills = ?, hard_skills = ?,
+            months_to_employment = ?
         WHERE id = ?
     """, [
         data.get('firstName', ''), data.get('middleName', ''), data.get('lastName', ''),
         data.get('age', 22), data.get('degree', ''),
         data.get('avgGrade', 0), data.get('avgProfGrade', 0), data.get('avgElecGrade', 0),
         data.get('ojtGrade', 0), data.get('softSkills', 0), data.get('hardSkills', 0),
+        months,
         user_id,
     ])
     db.commit()
@@ -145,7 +155,7 @@ def get_ncae_questions():
     program_key = get_program_key(user['course'])
 
     rows = db.execute("""
-        SELECT question_num, question, option_a, option_b, option_c, option_d, category
+        SELECT question_num, question, category
         FROM ncae_questions
         WHERE program = ?
         ORDER BY question_num
@@ -154,15 +164,10 @@ def get_ncae_questions():
     if not rows:
         return jsonify({'error': f'No questions found for program {program_key}. Please contact admin.'}), 404
 
+    # Self-rating format: each item is a statement to rate 1-5
     questions = [{
         'num': r['question_num'],
-        'question': r['question'],
-        'options': {
-            'A': r['option_a'],
-            'B': r['option_b'],
-            'C': r['option_c'],
-            'D': r['option_d'],
-        },
+        'statement': r['question'],
         'category': r['category'],
     } for r in rows]
 
@@ -171,10 +176,13 @@ def get_ncae_questions():
         'program': program_key,
         'course': user['course'],
         'total_questions': len(questions),
+        'rating_scale': {'min': 1, 'max': 5, 'labels': {
+            '1': 'Poor', '2': 'Fair', '3': 'Good', '4': 'Very Good', '5': 'Excellent',
+        }},
         'sections': {
-            'hard_skills': {'label': 'Hard Skills Aptitude', 'range': '1–20', 'count': 20},
-            'soft_skills': {'label': 'Soft Skills Situational Judgment', 'range': '21–35', 'count': 15},
-            'specific_skills': {'label': 'Specific Skills Assessment', 'range': '36–50', 'count': 15},
+            'hard': {'label': 'Hard Skills', 'range': '1-20', 'count': 20},
+            'soft': {'label': 'Soft Skills', 'range': '21-35', 'count': 15},
+            'specific': {'label': 'Specific Skills', 'range': '36-50', 'count': 15},
         },
         'questions': questions,
     }), 200
@@ -194,47 +202,53 @@ def submit_ncae():
         return jsonify({'error': 'Assessment already completed'}), 409
 
     data = request.get_json()
-    answers = data.get('answers', {})  # {question_num (str or int): 'A'/'B'/'C'/'D'}
+    # ratings: {question_num (str): 1-5 integer}
+    ratings = data.get('ratings', data.get('answers', {}))
 
     from ncae_data import get_program_key
     program_key = get_program_key(user['course'])
 
     rows = db.execute("""
-        SELECT question_num, correct_answer, category
+        SELECT question_num, category
         FROM ncae_questions WHERE program = ?
     """, [program_key]).fetchall()
 
     if not rows:
         return jsonify({'error': 'Questions not found for this program'}), 404
 
-    hard_correct = soft_correct = specific_correct = 0
+    hard_sum = soft_sum = specific_sum = 0
     hard_total = soft_total = specific_total = 0
 
     for row in rows:
         num = str(row['question_num'])
-        submitted = str(answers.get(num, answers.get(int(num), ''))).upper()
-        correct = row['correct_answer'].upper()
+        rating = int(ratings.get(num, ratings.get(int(num), 0)) or 0)
+        rating = max(1, min(5, rating))  # clamp to 1-5
         cat = row['category']
 
         if cat == 'hard':
             hard_total += 1
-            if submitted == correct:
-                hard_correct += 1
+            hard_sum += rating
         elif cat == 'soft':
             soft_total += 1
-            if submitted == correct:
-                soft_correct += 1
+            soft_sum += rating
         else:
             specific_total += 1
-            if submitted == correct:
-                specific_correct += 1
+            specific_sum += rating
 
-    hard_score = round(hard_correct / max(hard_total, 1) * 100, 2)
-    soft_score = round(soft_correct / max(soft_total, 1) * 100, 2)
-    specific_score = round(specific_correct / max(specific_total, 1) * 100, 2)
-    total_score = round((hard_correct + soft_correct + specific_correct) / max(len(rows), 1) * 100, 2)
+    # Score = sum_of_ratings / (count * 5) * 100  →  0-100 percentage of max
+    hard_score     = round(hard_sum     / max(hard_total     * 5, 1) * 100, 2)
+    soft_score     = round(soft_sum     / max(soft_total     * 5, 1) * 100, 2)
+    specific_score = round(specific_sum / max(specific_total * 5, 1) * 100, 2)
+    total_sum      = hard_sum + soft_sum + specific_sum
+    total_items    = hard_total + soft_total + specific_total
+    total_score    = round(total_sum / max(total_items * 5, 1) * 100, 2)
 
-    # Update user skills from NCAE scores
+    # Store avg ratings (out of 5) for the result screen
+    hard_avg     = round(hard_sum     / max(hard_total,     1), 2)
+    soft_avg     = round(soft_sum     / max(soft_total,     1), 2)
+    specific_avg = round(specific_sum / max(specific_total, 1), 2)
+
+    # Update user skills from self-rating scores
     db.execute("""
         UPDATE users SET
             hard_skills = ?,
@@ -257,7 +271,7 @@ def submit_ncae():
             answers=excluded.answers,
             completed_at=datetime('now')
     """, [user_id, program_key, hard_score, soft_score, specific_score, total_score,
-          json.dumps(answers)])
+          json.dumps(ratings)])
 
     db.commit()
 
@@ -265,13 +279,13 @@ def submit_ncae():
         'message': 'Assessment completed successfully',
         'scores': {
             'hard_skills': hard_score,
-            'hard_correct': hard_correct,
+            'hard_avg': hard_avg,
             'hard_total': hard_total,
             'soft_skills': soft_score,
-            'soft_correct': soft_correct,
+            'soft_avg': soft_avg,
             'soft_total': soft_total,
             'specific_skills': specific_score,
-            'specific_correct': specific_correct,
+            'specific_avg': specific_avg,
             'specific_total': specific_total,
             'total': total_score,
         },

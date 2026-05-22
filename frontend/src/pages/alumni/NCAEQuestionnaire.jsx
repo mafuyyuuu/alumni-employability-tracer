@@ -3,23 +3,73 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import api from '../../services/api'
 import {
-  MdCheckCircle, MdRadioButtonUnchecked, MdArrowForward, MdArrowBack,
-  MdSchool, MdWarning, MdStar,
+  MdCheckCircle, MdArrowForward, MdArrowBack,
+  MdSchool, MdWarning, MdStar, MdStarBorder,
 } from 'react-icons/md'
 
 const SECTION_META = {
-  hard:     { label: 'Hard Skills Aptitude',              color: '#0f2d1a', bg: '#e6ede8', range: '1–20',  count: 20 },
-  soft:     { label: 'Soft Skills Situational Judgment',  color: '#6366f1', bg: '#eef2ff', range: '21–35', count: 15 },
-  specific: { label: 'Specific Skills Assessment',        color: '#f59e0b', bg: '#fffbeb', range: '36–50', count: 15 },
+  hard:     { label: 'Hard Skills',     color: '#0f2d1a', bg: '#e6ede8', range: '1-20',  count: 20 },
+  soft:     { label: 'Soft Skills',     color: '#1d4ed8', bg: '#eff6ff', range: '21-35', count: 15 },
+  specific: { label: 'Specific Skills', color: '#b45309', bg: '#fffbeb', range: '36-50', count: 15 },
 }
 
-function ScoreBar({ label, correct, total, color }) {
-  const pct = total > 0 ? Math.round(correct / total * 100) : 0
+const RATING_LABELS = { 1: 'Poor', 2: 'Fair', 3: 'Good', 4: 'Very Good', 5: 'Excellent' }
+const RATING_COLORS = {
+  1: { bg: '#fef2f2', border: '#fca5a5', text: '#b91c1c' },
+  2: { bg: '#fff7ed', border: '#fdba74', text: '#c2410c' },
+  3: { bg: '#fefce8', border: '#fde047', text: '#854d0e' },
+  4: { bg: '#eff6ff', border: '#93c5fd', text: '#1d4ed8' },
+  5: { bg: '#e6ede8', border: '#6ee7b7', text: '#0f2d1a' },
+}
+
+function RatingInput({ num, statement, value, onChange, sectionColor, sectionBg }) {
+  return (
+    <div className="bg-white rounded-2xl p-5 shadow-sm">
+      <p className="text-sm font-semibold text-gray-800 mb-4 leading-snug">
+        <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg text-xs font-black mr-2 flex-shrink-0"
+          style={{ background: sectionBg, color: sectionColor }}>
+          {num}
+        </span>
+        {statement}
+      </p>
+
+      {/* 1-5 rating buttons */}
+      <div className="flex gap-2 flex-wrap">
+        {[1, 2, 3, 4, 5].map(score => {
+          const selected = value === score
+          const rc = RATING_COLORS[score]
+          return (
+            <button key={score} onClick={() => onChange(num, score)}
+              className="flex-1 min-w-[56px] flex flex-col items-center gap-1 py-2.5 px-2 rounded-xl text-xs font-bold border-2 transition-all"
+              style={selected
+                ? { background: rc.bg, borderColor: rc.border, color: rc.text }
+                : { background: '#fafafa', borderColor: '#e5e7eb', color: '#9ca3af' }}>
+              <span className="text-base font-black">{score}</span>
+              <span className="text-[10px] leading-tight text-center">{RATING_LABELS[score]}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Selected indicator */}
+      {value ? (
+        <p className="text-xs mt-2 font-semibold" style={{ color: RATING_COLORS[value].text }}>
+          You rated: {value} — {RATING_LABELS[value]}
+        </p>
+      ) : (
+        <p className="text-xs mt-2 text-gray-300">Select a rating (1 = Poor, 5 = Excellent)</p>
+      )}
+    </div>
+  )
+}
+
+function ScoreBar({ label, avg, color, bg }) {
+  const pct = Math.round((avg / 5) * 100)
   return (
     <div className="mb-4">
       <div className="flex justify-between text-xs mb-1">
         <span className="font-semibold text-gray-700">{label}</span>
-        <span className="font-bold" style={{ color }}>{correct}/{total} &nbsp;({pct}%)</span>
+        <span className="font-bold" style={{ color }}>{avg.toFixed(1)} / 5 &nbsp;({pct}%)</span>
       </div>
       <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden">
         <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
@@ -30,9 +80,9 @@ function ScoreBar({ label, correct, total, color }) {
 
 function ResultScreen({ scores, program, onContinue }) {
   const total = scores.total
-  const level = total >= 75 ? 'High' : total >= 50 ? 'Medium' : 'Low'
-  const levelColor = { High: '#0f2d1a', Medium: '#b45309', Low: '#b91c1c' }[level]
-  const levelBg   = { High: '#e6ede8', Medium: '#fffbeb', Low: '#fef2f2' }[level]
+  const level = total >= 65 ? 'Likely Employable' : total >= 35 ? 'Employable' : 'Least Employable'
+  const levelColor = { 'Likely Employable': '#0f2d1a', 'Employable': '#1d4ed8', 'Least Employable': '#b91c1c' }[level]
+  const levelBg   = { 'Likely Employable': '#e6ede8', 'Employable': '#eff6ff', 'Least Employable': '#fef2f2' }[level]
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: '#f3f4f6' }}>
@@ -42,29 +92,27 @@ function ResultScreen({ scores, program, onContinue }) {
           <MdCheckCircle style={{ color: '#0f2d1a', fontSize: '44px' }} />
         </div>
         <h1 className="text-2xl font-black text-gray-900 mb-1">Assessment Complete!</h1>
-        <p className="text-sm text-gray-400 mb-6">Your results have been saved to your profile.</p>
+        <p className="text-sm text-gray-400 mb-6">Your self-ratings have been saved to your profile.</p>
 
-        {/* Employability level */}
         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-6 text-sm font-bold"
           style={{ background: levelBg, color: levelColor }}>
-          <MdStar /> {level} Employability Potential
+          <MdStar /> {level}
         </div>
 
-        {/* Score breakdown */}
         <div className="bg-gray-50 rounded-2xl p-5 mb-6 text-left">
-          <ScoreBar label="Hard Skills Aptitude" correct={scores.hard_correct} total={scores.hard_total} color={SECTION_META.hard.color} />
-          <ScoreBar label="Soft Skills" correct={scores.soft_correct} total={scores.soft_total} color={SECTION_META.soft.color} />
-          <ScoreBar label="Specific Skills" correct={scores.specific_correct} total={scores.specific_total} color={SECTION_META.specific.color} />
+          <ScoreBar label="Hard Skills" avg={scores.hard_avg || (scores.hard_skills / 20)} color={SECTION_META.hard.color} bg={SECTION_META.hard.bg} />
+          <ScoreBar label="Soft Skills" avg={scores.soft_avg || (scores.soft_skills / 20)} color={SECTION_META.soft.color} bg={SECTION_META.soft.bg} />
+          <ScoreBar label="Specific Skills" avg={scores.specific_avg || (scores.specific_skills / 20)} color={SECTION_META.specific.color} bg={SECTION_META.specific.bg} />
           <div className="border-t border-gray-200 pt-4 mt-2">
             <div className="flex justify-between items-center">
               <span className="text-sm font-bold text-gray-700">Overall Score</span>
-              <span className="text-2xl font-black" style={{ color: levelColor }}>{scores.total}%</span>
+              <span className="text-2xl font-black" style={{ color: levelColor }}>{total.toFixed(1)}%</span>
             </div>
           </div>
         </div>
 
         <p className="text-xs text-gray-400 mb-5">
-          Your hard skills and soft skills scores have been applied to your employability profile for {program} program.
+          Your hard and soft skills ratings have been applied to your employability profile for the {program} program.
         </p>
 
         <button onClick={onContinue}
@@ -85,7 +133,7 @@ export default function NCAEQuestionnaire() {
   const [questions, setQuestions] = useState([])
   const [program, setProgram] = useState('')
   const [course, setCourse] = useState('')
-  const [answers, setAnswers] = useState({})
+  const [ratings, setRatings] = useState({})     // {num: 1-5}
   const [currentSection, setCurrentSection] = useState('hard')
   const [submitting, setSubmitting] = useState(false)
   const [scores, setScores] = useState(null)
@@ -117,14 +165,14 @@ export default function NCAEQuestionnaire() {
   const currentQs = sectionQuestions[currentSection] || []
 
   const answeredInSection = (sec) =>
-    (sectionQuestions[sec] || []).filter(q => answers[q.num]).length
+    (sectionQuestions[sec] || []).filter(q => ratings[q.num] > 0).length
 
-  const totalAnswered = Object.keys(answers).length
+  const totalAnswered = questions.filter(q => ratings[q.num] > 0).length
   const totalQuestions = questions.length
   const allAnswered = totalAnswered === totalQuestions && totalQuestions > 0
 
-  function selectAnswer(num, choice) {
-    setAnswers(prev => ({ ...prev, [num]: choice }))
+  function setRating(num, value) {
+    setRatings(prev => ({ ...prev, [num]: value }))
   }
 
   function goNext() {
@@ -144,7 +192,7 @@ export default function NCAEQuestionnaire() {
   function submit() {
     if (!allAnswered) return
     setSubmitting(true)
-    api.post('/alumni/ncae/submit', { answers }).then(r => {
+    api.post('/alumni/ncae/submit', { ratings }).then(r => {
       setScores(r.data.scores)
       if (refreshUser) refreshUser()
     }).catch(e => {
@@ -158,7 +206,7 @@ export default function NCAEQuestionnaire() {
         <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: '#0f2d1a' }}>
           <MdSchool style={{ color: 'white', fontSize: '24px' }} />
         </div>
-        <p className="text-sm text-gray-500">Loading your assessment…</p>
+        <p className="text-sm text-gray-500">Loading your assessment...</p>
       </div>
     </div>
   )
@@ -169,7 +217,7 @@ export default function NCAEQuestionnaire() {
         <div className="bg-white rounded-3xl p-8 w-full max-w-sm text-center shadow-xl">
           <MdCheckCircle style={{ color: '#0f2d1a', fontSize: '48px', margin: '0 auto 12px' }} />
           <h2 className="text-lg font-bold text-gray-900 mb-2">Assessment Already Complete</h2>
-          <p className="text-sm text-gray-400 mb-6">You have already completed the NCAE Skills Assessment.</p>
+          <p className="text-sm text-gray-400 mb-6">You have already completed the Skills Self-Rating Assessment.</p>
           <button onClick={() => navigate('/alumni/dashboard')}
             className="w-full py-3 rounded-2xl text-sm font-bold text-white"
             style={{ background: '#0f2d1a' }}>
@@ -198,11 +246,10 @@ export default function NCAEQuestionnaire() {
                 <MdSchool className="text-lg" />
               </div>
               <div>
-                <p className="text-sm font-bold text-gray-900 leading-tight">NCAE Skills Assessment</p>
-                <p className="text-xs text-gray-400">{course} · {totalAnswered}/{totalQuestions} answered</p>
+                <p className="text-sm font-bold text-gray-900 leading-tight">Skills Self-Rating Assessment</p>
+                <p className="text-xs text-gray-400">{course} · {totalAnswered}/{totalQuestions} rated</p>
               </div>
             </div>
-            {/* Progress bar */}
             <div className="flex-1 max-w-xs">
               <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
                 <div className="h-full rounded-full transition-all duration-300"
@@ -232,7 +279,7 @@ export default function NCAEQuestionnaire() {
                     ? { background: sm.bg, color: sm.color }
                     : { background: '#f3f4f6', color: '#6b7280' }}>
                   {done && <MdCheckCircle className="text-xs" />}
-                  {sec === 'hard' ? 'Hard Skills' : sec === 'soft' ? 'Soft Skills' : 'Specific'}
+                  {sm.label}
                   <span className="opacity-70">({answered}/{total})</span>
                 </button>
               )
@@ -256,51 +303,38 @@ export default function NCAEQuestionnaire() {
           style={{ background: meta.bg }}>
           <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
             style={{ background: meta.color }}>
-            <MdSchool style={{ color: 'white', fontSize: '20px' }} />
+            <MdStar style={{ color: 'white', fontSize: '20px' }} />
           </div>
           <div>
             <p className="text-sm font-bold" style={{ color: meta.color }}>{meta.label}</p>
-            <p className="text-xs" style={{ color: meta.color, opacity: 0.7 }}>
-              Items {meta.range} · {answeredInSection(currentSection)}/{meta.count} answered
+            <p className="text-xs" style={{ color: meta.color, opacity: 0.8 }}>
+              Items {meta.range} · Rate each statement 1 (Poor) to 5 (Excellent) · {answeredInSection(currentSection)}/{meta.count} rated
             </p>
           </div>
         </div>
 
+        {/* Rating scale legend */}
+        <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+          {[1, 2, 3, 4, 5].map(s => (
+            <div key={s} className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold flex-shrink-0"
+              style={{ background: RATING_COLORS[s].bg, color: RATING_COLORS[s].text, border: `1px solid ${RATING_COLORS[s].border}` }}>
+              {s} — {RATING_LABELS[s]}
+            </div>
+          ))}
+        </div>
+
         {/* Questions */}
         <div className="space-y-4">
-          {currentQs.map((q, qi) => (
-            <div key={q.num} className="bg-white rounded-2xl p-5 shadow-sm">
-              <p className="text-sm font-bold text-gray-900 mb-4 leading-snug">
-                <span className="text-xs font-black mr-2 px-2 py-0.5 rounded-lg"
-                  style={{ background: meta.bg, color: meta.color }}>
-                  {q.num}
-                </span>
-                {q.question}
-              </p>
-              <div className="space-y-2">
-                {Object.entries(q.options).map(([letter, text]) => {
-                  const selected = answers[q.num] === letter
-                  return (
-                    <button key={letter}
-                      onClick={() => selectAnswer(q.num, letter)}
-                      className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all border"
-                      style={selected
-                        ? { background: meta.bg, borderColor: meta.color, color: meta.color }
-                        : { background: '#fafafa', borderColor: '#e5e7eb', color: '#374151' }}>
-                      <div className="flex-shrink-0">
-                        {selected
-                          ? <MdCheckCircle style={{ color: meta.color, fontSize: '18px' }} />
-                          : <MdRadioButtonUnchecked style={{ color: '#d1d5db', fontSize: '18px' }} />}
-                      </div>
-                      <span className="text-xs font-bold mr-1" style={{ color: selected ? meta.color : '#9ca3af' }}>
-                        {letter}.
-                      </span>
-                      <span className="text-sm flex-1">{text}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+          {currentQs.map((q) => (
+            <RatingInput
+              key={q.num}
+              num={q.num}
+              statement={q.statement}
+              value={ratings[q.num] || 0}
+              onChange={setRating}
+              sectionColor={meta.color}
+              sectionBg={meta.bg}
+            />
           ))}
         </div>
 
@@ -325,7 +359,7 @@ export default function NCAEQuestionnaire() {
               {submitting ? (
                 <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="white" strokeWidth="4" />
-                  <path className="opacity-75" fill="white" d="M4 12a8 8 0 018-8v8z" /></svg> Submitting…</>
+                  <path className="opacity-75" fill="white" d="M4 12a8 8 0 018-8v8z" /></svg> Submitting...</>
               ) : (
                 <><MdCheckCircle /> Submit Assessment</>
               )}
@@ -333,13 +367,12 @@ export default function NCAEQuestionnaire() {
           )}
         </div>
 
-        {/* Warning if not all answered */}
         {currentIdx === sectionOrder.length - 1 && !allAnswered && (
           <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 flex items-center gap-2 mb-6">
             <MdWarning className="text-amber-500 flex-shrink-0" />
             <p className="text-xs text-amber-700">
-              Please answer all <span className="font-bold">{totalQuestions - totalAnswered}</span> remaining
-              question{totalQuestions - totalAnswered !== 1 ? 's' : ''} before submitting.
+              Please rate all <span className="font-bold">{totalQuestions - totalAnswered}</span> remaining
+              item{totalQuestions - totalAnswered !== 1 ? 's' : ''} before submitting.
               Check all 3 sections.
             </p>
           </div>
