@@ -67,7 +67,19 @@ python app.py
 ```
 The server will start at `http://localhost:5001`. On first run, it will automatically initialize the database and seed it with initial data.
 
-### 3. Frontend Setup
+### 3. Machine Learning Training
+To use the employability prediction features, you must first import the datasets and train the models:
+```bash
+cd backend
+python train_all.py
+```
+This script will:
+1.  Import all `PLP_*_Employability_Dataset.xlsx` files from the root directory into the database.
+2.  Train the **Random Forest** classification model.
+3.  Train the **Linear Regression** employability model.
+4.  Save the model artifacts to `backend/ml/saved_models/`.
+
+### 4. Frontend Setup
 ```bash
 cd ../frontend
 npm install
