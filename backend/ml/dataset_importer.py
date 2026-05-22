@@ -256,6 +256,8 @@ def _ensure_ml_training_table(conn):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             source_name TEXT NOT NULL,
             source_row_id TEXT NOT NULL,
+            name TEXT DEFAULT '',
+            email TEXT DEFAULT '',
             course TEXT NOT NULL,
             graduation_year INTEGER NOT NULL,
             age INTEGER NOT NULL,
@@ -265,12 +267,29 @@ def _ensure_ml_training_table(conn):
             ojt_grade REAL NOT NULL,
             soft_skills REAL NOT NULL,
             hard_skills REAL NOT NULL,
+            board_passer INTEGER DEFAULT 0,
+            board_exam_score REAL DEFAULT 0,
+            months_to_employment INTEGER DEFAULT NULL,
             employed INTEGER NOT NULL,
             is_active INTEGER DEFAULT 1,
             imported_at TEXT DEFAULT (datetime('now')),
             UNIQUE(source_name, source_row_id)
         )
     """)
+    # Migrations for existing tables
+    migrations = [
+        "ALTER TABLE ml_training_rows ADD COLUMN name TEXT DEFAULT ''",
+        "ALTER TABLE ml_training_rows ADD COLUMN email TEXT DEFAULT ''",
+        "ALTER TABLE ml_training_rows ADD COLUMN board_passer INTEGER DEFAULT 0",
+        "ALTER TABLE ml_training_rows ADD COLUMN board_exam_score REAL DEFAULT 0",
+        "ALTER TABLE ml_training_rows ADD COLUMN months_to_employment INTEGER DEFAULT NULL",
+    ]
+    for m in migrations:
+        try:
+            conn.execute(m)
+        except Exception:
+            pass  # Column already exists
+
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_ml_training_rows_active
         ON ml_training_rows (is_active, source_name)
