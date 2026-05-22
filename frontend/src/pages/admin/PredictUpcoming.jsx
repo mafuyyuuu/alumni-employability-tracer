@@ -9,6 +9,10 @@ export default function PredictUpcoming() {
   const [report, setReport] = useState(null)
   const [error, setError] = useState('')
   const [isDragging, setIsDragging] = useState(false)
+  
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1)
+  const ITEMS_PER_PAGE = 100
 
   const handleDragOver = (e) => {
     e.preventDefault()
@@ -41,12 +45,21 @@ export default function PredictUpcoming() {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
       setReport(res.data)
+      setCurrentPage(1) // Reset to first page on new upload
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to process dataset')
     } finally {
       setLoading(false)
     }
   }
+
+  // Pagination Logic
+  const totalItems = report?.predictions?.length || 0
+  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE)
+  const paginatedPredictions = report?.predictions?.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  ) || []
 
   return (
     <AdminLayout>
@@ -158,7 +171,7 @@ export default function PredictUpcoming() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                      {report.predictions.map((p, i) => (
+                      {paginatedPredictions.map((p, i) => (
                         <tr key={i} className="hover:bg-gray-50 transition-colors">
                           <td className="px-6 py-4 font-bold text-gray-700">{p.name}</td>
                           <td className="px-6 py-4 text-gray-500">{p.course}</td>
@@ -176,6 +189,32 @@ export default function PredictUpcoming() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className="px-6 py-4 border-t border-gray-50 bg-gray-50/30 flex items-center justify-between">
+                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">
+                      Page <span className="text-emerald-900">{currentPage}</span> of {totalPages} 
+                      <span className="ml-2 opacity-40">({totalItems} total candidates)</span>
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                        className="px-4 py-1.5 text-[10px] font-black uppercase tracking-widest border border-gray-200 rounded-lg hover:bg-white disabled:opacity-30 transition-all text-gray-600"
+                      >
+                        Prev
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                        className="px-4 py-1.5 text-[10px] font-black uppercase tracking-widest bg-emerald-900 text-white rounded-lg hover:bg-emerald-800 disabled:opacity-30 transition-all"
+                      >
+                        Next Batch
+                      </button>
+                    </div>
+                  </div>
+                )}
              </div>
           </div>
         )}
