@@ -1,5 +1,6 @@
 import csv
 import os
+import re
 import sqlite3
 from collections import Counter
 from datetime import datetime
@@ -167,6 +168,16 @@ def _gwa_to_grade(value):
     return _clamp(grade, 55.0, 100.0)
 
 
+def _auto_grade(value, default=75.0):
+    """Auto-detect GWA (1–5 scale) vs percentage (>5) and convert to 0–100."""
+    v = _to_float(value, None)
+    if v is None:
+        return float(default)
+    if 1.0 <= v <= 5.0:
+        return _gwa_to_grade(v)
+    return _clamp(v, 0.0, 100.0)
+
+
 def _derive_age(graduation_year, current_year):
     years_since_grad = max(0, current_year - graduation_year)
     return int(_clamp(22 + years_since_grad, 20, 45))
@@ -188,10 +199,14 @@ def _derive_elective_grade(row, soft_skills, hard_skills):
 
 
 def _derive_ojt_grade(prof_grade, internship_experience, internship_duration_months):
+    dur = _to_float(internship_duration_months, 0.0)
+    # Values > 12 are OJT grades (0-100 scale), not duration in months
+    if dur > 12:
+        return _clamp(dur, 55.0, 100.0)
     score = _to_float(prof_grade, 75.0)
     if internship_experience >= 1:
         score += 4.0
-    score += _clamp(internship_duration_months, 0.0, 6.0) * 1.2
+    score += _clamp(dur, 0.0, 6.0) * 1.2
     return _clamp(score, 55.0, 100.0)
 
 
@@ -200,11 +215,16 @@ def _map_row(row, source_row_id, current_year, year_override=None):
     name = str(row.get('name') or row.get('Name') or '').strip()
     email = str(row.get('email') or row.get('Email') or '').strip()
 
-    # graduation_year: use column value if present, else fall back to year_override
+    # graduation_year: explicit column → year_override → alumni_id embedded year
     raw_year = row.get('graduation_year') or row.get('jr_grad') or ''
     graduation_year = _to_int(raw_year, 0)
     if graduation_year <= 0 and year_override:
         graduation_year = int(year_override)
+    if graduation_year <= 0:
+        alumni_id = str(row.get('alumni_id') or '').strip()
+        m = re.search(r'\b(20\d{2})\b', alumni_id)
+        if m:
+            graduation_year = int(m.group(1))
     if graduation_year <= 0:
         return None, f"row {source_row_id}: missing graduation_year (provide dataset_year when uploading)"
 
@@ -212,8 +232,8 @@ def _map_row(row, source_row_id, current_year, year_override=None):
     if employed is None:
         return None, f"row {source_row_id}: invalid employment_status"
 
-    avg_grade     = _gwa_to_grade(row.get('GWA'))
-    avg_prof_grade = _gwa_to_grade(row.get('capstone_grade'))
+    avg_grade      = _gwa_to_grade(row.get('GWA'))
+    avg_prof_grade = _auto_grade(row.get('capstone_grade'))
     # Auto-detect GWA vs percentage scale for skills
     soft_skills   = _skills_to_percent(row.get('soft_skills_avg', 0))
     hard_skills   = _skills_to_percent(row.get('hard_skills_avg', 0))
@@ -301,6 +321,7 @@ def import_training_csv(
     csv_path: Optional[str] = None,
     source_name: Optional[str] = None,
     year_override: Optional[int] = None,
+    progress_callback=None,
 ) -> dict:
     db_path = database_path or os.getenv('DATABASE', 'plp_alumni.db')
     dataset_path = Path(csv_path) if csv_path else Path(__file__).resolve().parent / 'data' / 'first_clean_dataset.csv'
@@ -318,15 +339,16 @@ def import_training_csv(
     if ext in ('.xlsx', '.xls'):
         try:
             import pandas as pd
-            df = pd.read_excel(dataset_path)
+            df = pd.read_excel(dataset_path, dtype=str)
+            df = df.fillna('')
+            # Replace literal 'nan'/'NaT' strings left over from mixed types
+            df = df.replace({'nan': '', 'NaT': ''})
             raw_columns = list(df.columns)
             col_mapping = _normalize_columns(raw_columns)
-            records = []
-            for _, row_series in df.iterrows():
-                row_dict = {col_mapping.get(c, c): ('' if str(v) in ('nan', 'NaT') else str(v) if not isinstance(v, str) else v)
-                            for c, v in row_series.items()}
-                records.append(row_dict)
-            normalized_columns = [col_mapping.get(c, c) for c in raw_columns]
+            # Rename columns in bulk — much faster than iterrows
+            df.columns = [col_mapping.get(c, c) for c in raw_columns]
+            normalized_columns = list(df.columns)
+            records = df.to_dict(orient='records')
         except ImportError:
             raise ValueError("pandas/openpyxl required to import Excel files. Run: pip install openpyxl")
     else:
@@ -343,8 +365,14 @@ def import_training_csv(
 
     conn = sqlite3.connect(db_path)
     try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
         _ensure_ml_training_table(conn)
         conn.execute("UPDATE ml_training_rows SET is_active = 0 WHERE source_name = ?", [source])
+
+        # Build all rows first, then insert in one batch
+        total_count = len(records)
+        batch = []
         for line_num, row in enumerate(records, start=2):
             total_rows += 1
             source_row_id = (row.get('alumni_id') or '').strip() or str(line_num)
@@ -352,61 +380,42 @@ def import_training_csv(
             if not mapped:
                 skipped_rows += 1
                 skip_reasons[reason] += 1
-                continue
+            else:
+                batch.append([
+                    source,
+                    mapped['source_row_id'],
+                    mapped['name'],
+                    mapped['email'],
+                    mapped['course'],
+                    mapped['graduation_year'],
+                    mapped['age'],
+                    mapped['avg_grade'],
+                    mapped['avg_prof_grade'],
+                    mapped['avg_elec_grade'],
+                    mapped['ojt_grade'],
+                    mapped['soft_skills'],
+                    mapped['hard_skills'],
+                    mapped['employed'],
+                ])
+                imported_rows += 1
+            if progress_callback and total_count > 0:
+                progress_callback(total_rows, total_count)
 
-            conn.execute("""
-                INSERT INTO ml_training_rows (
-                    source_name,
-                    source_row_id,
-                    name,
-                    email,
-                    course,
-                    graduation_year,
-                    age,
-                    avg_grade,
-                    avg_prof_grade,
-                    avg_elec_grade,
-                    ojt_grade,
-                    soft_skills,
-                    hard_skills,
-                    employed,
-                    is_active,
-                    imported_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'))
-                ON CONFLICT(source_name, source_row_id) DO UPDATE SET
-                    name = excluded.name,
-                    email = excluded.email,
-                    course = excluded.course,
-                    graduation_year = excluded.graduation_year,
-                    age = excluded.age,
-                    avg_grade = excluded.avg_grade,
-                    avg_prof_grade = excluded.avg_prof_grade,
-                    avg_elec_grade = excluded.avg_elec_grade,
-                    ojt_grade = excluded.ojt_grade,
-                    soft_skills = excluded.soft_skills,
-                    hard_skills = excluded.hard_skills,
-                    employed = excluded.employed,
-                    is_active = 1,
-                    imported_at = datetime('now')
-            """, [
-                source,
-                mapped['source_row_id'],
-                mapped['name'],
-                mapped['email'],
-                mapped['course'],
-                mapped['graduation_year'],
-                mapped['age'],
-                mapped['avg_grade'],
-                mapped['avg_prof_grade'],
-                mapped['avg_elec_grade'],
-                mapped['ojt_grade'],
-                mapped['soft_skills'],
-                mapped['hard_skills'],
-                mapped['employed'],
-            ])
-            imported_rows += 1
-
+        conn.executemany("""
+            INSERT INTO ml_training_rows (
+                source_name, source_row_id, name, email, course,
+                graduation_year, age, avg_grade, avg_prof_grade, avg_elec_grade,
+                ojt_grade, soft_skills, hard_skills, employed, is_active, imported_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'))
+            ON CONFLICT(source_name, source_row_id) DO UPDATE SET
+                name = excluded.name, email = excluded.email, course = excluded.course,
+                graduation_year = excluded.graduation_year, age = excluded.age,
+                avg_grade = excluded.avg_grade, avg_prof_grade = excluded.avg_prof_grade,
+                avg_elec_grade = excluded.avg_elec_grade, ojt_grade = excluded.ojt_grade,
+                soft_skills = excluded.soft_skills, hard_skills = excluded.hard_skills,
+                employed = excluded.employed, is_active = 1, imported_at = datetime('now')
+        """, batch)
         conn.commit()
 
         source_active_rows = conn.execute(

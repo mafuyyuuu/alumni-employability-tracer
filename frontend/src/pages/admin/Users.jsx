@@ -405,8 +405,13 @@ function EditUserModal({ userId, onClose, onSaved }) {
 export default function Users() {
   const [users, setUsers] = useState([])
   const [stats, setStats] = useState({ total: 0, active: 0, employed: 0, unemployed: 0 })
+  const [availableYears, setAvailableYears] = useState([])
+  const [availableCourses, setAvailableCourses] = useState([])
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('All')
+  const [yearFilter, setYearFilter] = useState('')
+  const [courseFilter, setCourseFilter] = useState('')
+  const [employabilityFilter, setEmployabilityFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const [sortKey, setSortKey] = useState(null)
   const [sortDir, setSortDir] = useState('asc')
@@ -419,14 +424,26 @@ export default function Users() {
     setUsers(data.users || [])
     setStats(data.stats || {})
     if (data.pagination) setPagination(data.pagination)
+    if (data.available_years) setAvailableYears(data.available_years)
+    if (data.available_courses) setAvailableCourses(data.available_courses)
   }
 
   function fetchUsers(next = {}) {
-    const nextSearch = next.search ?? search
-    const nextFilter = next.filter ?? filter
-    const nextPage   = next.page ?? page
+    const nextSearch      = next.search           ?? search
+    const nextFilter      = next.filter           ?? filter
+    const nextPage        = next.page             ?? page
+    const nextSortKey     = next.sortKey          ?? sortKey
+    const nextSortDir     = next.sortDir          ?? sortDir
+    const nextYear        = next.yearFilter       !== undefined ? next.yearFilter       : yearFilter
+    const nextCourse      = next.courseFilter     !== undefined ? next.courseFilter     : courseFilter
+    const nextEmpFilter   = next.employabilityFilter !== undefined ? next.employabilityFilter : employabilityFilter
     setLoading(true)
-    api.get('/admin/users', { params: { search: nextSearch, filter: nextFilter, page: nextPage } })
+    const params = { search: nextSearch, filter: nextFilter, page: nextPage }
+    if (nextSortKey)    { params.sort_by = nextSortKey; params.sort_dir = nextSortDir }
+    if (nextYear)       params.year_filter = nextYear
+    if (nextCourse)     params.course_filter = nextCourse
+    if (nextEmpFilter)  params.employability_filter = nextEmpFilter
+    api.get('/admin/users', { params })
       .then(r => applyUsersResponse(r.data))
       .catch(() => {}).finally(() => setLoading(false))
   }
@@ -457,29 +474,14 @@ export default function Users() {
   }
 
   function handleSort(key) {
-    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortKey(key); setSortDir('asc') }
+    const newDir = sortKey === key && sortDir === 'asc' ? 'desc' : 'asc'
+    setSortKey(key)
+    setSortDir(newDir)
+    setPage(1)
+    fetchUsers({ sortKey: key, sortDir: newDir, page: 1 })
   }
 
-  const sortedUsers = useMemo(() => {
-    if (!sortKey) return users
-    return [...users].sort((a, b) => {
-      let av, bv
-      if (sortKey === 'year') {
-        av = a.year ?? 0; bv = b.year ?? 0
-      } else if (sortKey === 'course') {
-        av = (a.course || '').toLowerCase(); bv = (b.course || '').toLowerCase()
-      } else if (sortKey === 'employability') {
-        av = LEVEL_ORDER[a.employability_level] ?? 99
-        bv = LEVEL_ORDER[b.employability_level] ?? 99
-      } else if (sortKey === 'employment') {
-        av = a.employed ? 0 : 1; bv = b.employed ? 0 : 1
-      }
-      if (av < bv) return sortDir === 'asc' ? -1 : 1
-      if (av > bv) return sortDir === 'asc' ? 1 : -1
-      return 0
-    })
-  }, [users, sortKey, sortDir])
+  const sortedUsers = users
 
   function SortableHeader({ label, colKey }) {
     const active = sortKey === colKey
@@ -498,10 +500,10 @@ export default function Users() {
     )
   }
 
-  const likelyCount  = users.filter(u => u.employability_level === 'Likely Employable').length
-  const emploCount   = users.filter(u => u.employability_level === 'Employable').length
-  const leastCount   = users.filter(u => u.employability_level === 'Least Employable').length
-  const pendingCount = users.filter(u => u.employability_level === 'Pending Assessment').length
+  const likelyCount  = stats.likely   ?? 0
+  const emploCount   = stats.employable ?? 0
+  const leastCount   = stats.least    ?? 0
+  const pendingCount = 0
 
   return (
     <AdminLayout>
@@ -557,6 +559,52 @@ export default function Users() {
               className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2"
               style={{ '--tw-ring-color': 'rgba(15,45,26,0.2)' }} />
           </div>
+          {/* Filter/sort dropdowns */}
+          <div className="flex gap-2 flex-wrap">
+            {/* Program — filter by actual program */}
+            <select value={courseFilter}
+              onChange={e => { setCourseFilter(e.target.value); setPage(1); fetchUsers({ courseFilter: e.target.value, page: 1 }) }}
+              className="border rounded-xl px-2.5 py-2 text-xs bg-white font-medium focus:outline-none"
+              style={{ borderColor: courseFilter ? '#0f2d1a' : '#e5e7eb', color: courseFilter ? '#0f2d1a' : '#374151' }}>
+              <option value="">Program</option>
+              {availableCourses.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+
+            {/* Year — filter by actual dataset year */}
+            <select value={yearFilter}
+              onChange={e => { setYearFilter(e.target.value); setPage(1); fetchUsers({ yearFilter: e.target.value, page: 1 }) }}
+              className="border rounded-xl px-2.5 py-2 text-xs bg-white font-medium focus:outline-none"
+              style={{ borderColor: yearFilter ? '#0f2d1a' : '#e5e7eb', color: yearFilter ? '#0f2d1a' : '#374151' }}>
+              <option value="">Year</option>
+              {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+
+            {/* Employability — filter by tier */}
+            <select value={employabilityFilter}
+              onChange={e => { setEmployabilityFilter(e.target.value); setPage(1); fetchUsers({ employabilityFilter: e.target.value, page: 1 }) }}
+              className="border rounded-xl px-2.5 py-2 text-xs bg-white font-medium focus:outline-none"
+              style={{ borderColor: employabilityFilter ? '#0f2d1a' : '#e5e7eb', color: employabilityFilter ? '#0f2d1a' : '#374151' }}>
+              <option value="">Employability</option>
+              <option value="Likely Employable">Likely Employable</option>
+              <option value="Employable">Employable</option>
+              <option value="Least Employable">Least Employable</option>
+            </select>
+
+            {/* Employment — sort */}
+            <select value={sortKey === 'employment' ? sortDir : ''}
+              onChange={e => {
+                const d = e.target.value
+                if (!d) { setSortKey(null); fetchUsers({ sortKey: null, page: 1 }); return }
+                setSortKey('employment'); setSortDir(d); setPage(1)
+                fetchUsers({ sortKey: 'employment', sortDir: d, page: 1 })
+              }}
+              className="border rounded-xl px-2.5 py-2 text-xs bg-white font-medium focus:outline-none"
+              style={{ borderColor: sortKey === 'employment' ? '#0f2d1a' : '#e5e7eb', color: sortKey === 'employment' ? '#0f2d1a' : '#374151' }}>
+              <option value="">Employment</option>
+              <option value="asc">Employed first</option>
+              <option value="desc">Unemployed first</option>
+            </select>
+          </div>
           <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
             {['All', 'Active', 'Employed', 'Unemployed'].map(f => (
               <button key={f} onClick={() => { setFilter(f); fetchUsers({ filter: f }) }}
@@ -597,13 +645,8 @@ export default function Users() {
                   {u.name ? u.name[0] : '?'}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-800 truncate flex items-center gap-2">
+                  <p className="text-sm font-semibold text-gray-800 truncate">
                     {u.name}
-                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter ${
-                      u.type === 'Registered' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'
-                    }`}>
-                      {u.type || 'Registered'}
-                    </span>
                   </p>
                   <p className="text-xs text-gray-400 truncate">{u.email}</p>
                   {u.board_passer && (

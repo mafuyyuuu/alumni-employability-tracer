@@ -221,6 +221,17 @@ CREATE TABLE IF NOT EXISTS ncae_results (
     answers TEXT DEFAULT '',
     completed_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS job_applications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    job_id INTEGER NOT NULL,
+    status TEXT DEFAULT 'Pending',
+    cover_letter TEXT DEFAULT '',
+    applied_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(user_id, job_id)
+);
 """
 
 
@@ -258,6 +269,16 @@ def init_db():
         "ALTER TABLE users ADD COLUMN ncae_completed INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN months_to_employment INTEGER DEFAULT NULL",
         "ALTER TABLE ml_training_rows ADD COLUMN months_to_employment INTEGER DEFAULT NULL",
+        """CREATE TABLE IF NOT EXISTS job_applications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            job_id INTEGER NOT NULL,
+            status TEXT DEFAULT 'Pending',
+            cover_letter TEXT DEFAULT '',
+            applied_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(user_id, job_id)
+        )""",
     ]
     for m in migrations:
         try:

@@ -206,6 +206,49 @@ class EmployabilityPredictor:
             result['model_note'] = model_note_or_error
         return result
 
+    def predict_batch(self, input_list: list, model: str = 'rf') -> list:
+        """Run predictions on a list of input dicts in one vectorized call."""
+        if not input_list:
+            return []
+        model_key, err = self._resolve_model(model)
+        if not model_key:
+            return [{'error': err}] * len(input_list)
+
+        model_obj = self.models.get(model_key)
+        expected_features = self.features.get(model_key)
+        defaults = self.defaults.get(model_key, {})
+        if model_obj is None or not expected_features:
+            return [{'error': 'Model not available'}] * len(input_list)
+
+        # Build one DataFrame for all rows at once
+        rows = []
+        for inp in input_list:
+            row = {f: 0.0 for f in expected_features}
+            data = self._normalize_input(inp)
+            for field in NUMERIC_INPUT_FIELDS:
+                if field in expected_features:
+                    row[field] = self._to_float(data.get(field, defaults.get(field, 0.0)),
+                                                defaults.get(field, 0.0))
+            course = str(data.get('course', defaults.get('course', ''))).strip().upper()
+            col = f'course_{course}'
+            if col in expected_features:
+                row[col] = 1.0
+            rows.append(row)
+
+        X = pd.DataFrame(rows, columns=expected_features)
+        preds = model_obj.predict(X)
+        probas = model_obj.predict_proba(X)[:, 1] if hasattr(model_obj, 'predict_proba') else None
+
+        results = []
+        for i, pred in enumerate(preds):
+            prob = float(probas[i]) if probas is not None else None
+            results.append({
+                'prediction': int(pred),
+                'probability_employed': round(prob, 4) if prob is not None else None,
+                'model_used': model_key,
+            })
+        return results
+
     def predict(self, input_data: dict, model: str = 'rf') -> str:
         details = self.predict_details(input_data, model=model)
         if details.get('error'):

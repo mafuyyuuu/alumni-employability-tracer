@@ -114,7 +114,12 @@ export default function Forecasting() {
 
   // Best model accuracy metrics
   const bestMetrics = metrics[bestKey] || {}
-  const accuracy = typeof bestMetrics.r2 === 'number' ? Math.round(bestMetrics.r2 * 100) : null
+  // Detect flat data: all historical rates identical → R²=1.0 is meaningless
+  const historicalRates = rawData.filter(d => !d.forecast).map(d => d.rate)
+  const isFlat = historicalRates.length > 1 &&
+    historicalRates.every(r => Math.abs(r - historicalRates[0]) < 0.01)
+  const accuracy = (!isFlat && typeof bestMetrics.r2 === 'number')
+    ? Math.round(bestMetrics.r2 * 100) : null
   const mapeVal  = typeof bestMetrics.mape === 'number' ? `±${bestMetrics.mape}%` : null
 
   return (
@@ -159,6 +164,14 @@ export default function Forecasting() {
             </button>
           </div>
         </div>
+
+        {/* Flat data warning */}
+        {isFlat && historicalRates.length > 0 && (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-2 text-xs text-amber-800">
+            <MdInfoOutline className="text-base flex-shrink-0 mt-0.5" />
+            <span>All historical years have the same employment rate ({historicalRates[0]}%). Upload datasets with different yearly outcomes to enable meaningful trend forecasting. Forecast accuracy metric is hidden when data has no variation.</span>
+          </div>
+        )}
 
         {/* Accuracy summary pill */}
         {(accuracy !== null || mapeVal) && (

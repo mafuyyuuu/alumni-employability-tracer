@@ -1,12 +1,14 @@
-from datetime import datetime, timezone
 import os
 import warnings
+from datetime import datetime, timezone
 from typing import Optional
 
 import joblib
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_absolute_error, r2_score
-from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, classification_report
+from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 try:
     from ml.training_data import (
@@ -28,7 +30,7 @@ models_dir = os.path.join(base_dir, 'saved_models')
 
 
 def train_linear_employability(database_path: Optional[str] = None) -> dict:
-    print("--- Starting ML Pipeline: Linear Regression Employability (DB Source) ---")
+    print("--- Starting ML Pipeline: Logistic Regression (DB Source) ---")
     df = load_training_dataframe(database_path)
     validate_training_dataframe(df)
     X, y, defaults = build_feature_matrix(df)
@@ -38,17 +40,28 @@ def train_linear_employability(database_path: Optional[str] = None) -> dict:
         X, y, test_size=0.2, random_state=42, stratify=stratify
     )
 
-    lr_model = LinearRegression()
-    lr_model.fit(X_train, y_train)
+    # StandardScaler + LogisticRegression pipeline — scaling is critical for LR accuracy
+    pipeline = Pipeline([
+        ('scaler', StandardScaler()),
+        ('lr', LogisticRegression(
+            C=1.0,
+            max_iter=1000,
+            class_weight='balanced',
+            solver='lbfgs',
+            random_state=42,
+        )),
+    ])
 
-    raw_preds = lr_model.predict(X_test)
-    clipped = [min(1.0, max(0.0, float(v))) for v in raw_preds]
-    class_preds = [1 if v >= 0.5 else 0 for v in clipped]
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    cv_scores = cross_val_score(pipeline, X_train, y_train, cv=cv, scoring='accuracy', n_jobs=-1)
+    print(f"  LR CV accuracy: {cv_scores.mean()*100:.2f}% (+/- {cv_scores.std()*100:.2f}%)")
 
-    accuracy = (sum(int(pred == actual) for pred, actual in zip(class_preds, y_test)) / len(y_test)) * 100
-    mae = float(mean_absolute_error(y_test, clipped))
-    r2 = float(r2_score(y_test, clipped))
-    print(f"[OK] Training complete. Accuracy: {accuracy:.2f}%")
+    pipeline.fit(X_train, y_train)
+
+    class_preds = pipeline.predict(X_test)
+    accuracy = accuracy_score(y_test, class_preds) * 100
+    print(f"[OK] LR Test accuracy: {accuracy:.2f}%")
+    print(classification_report(y_test, class_preds, target_names=['Unemployed', 'Employed']))
 
     os.makedirs(models_dir, exist_ok=True)
     feature_names = X.columns.tolist()
@@ -58,16 +71,16 @@ def train_linear_employability(database_path: Optional[str] = None) -> dict:
         'feature_count': len(feature_names),
         'class_distribution': {int(k): int(v) for k, v in y.value_counts().to_dict().items()},
         'accuracy': round(float(accuracy), 2),
-        'mae': round(mae, 4),
-        'r2': round(r2, 4),
+        'cv_accuracy': round(float(cv_scores.mean() * 100), 2),
+        'model_type': 'LogisticRegression+Scaler',
         'trained_at_utc': datetime.now(timezone.utc).isoformat(),
     }
 
-    joblib.dump(lr_model, os.path.join(models_dir, 'employability_lr_model.joblib'))
+    joblib.dump(pipeline, os.path.join(models_dir, 'employability_lr_model.joblib'))
     joblib.dump(feature_names, os.path.join(models_dir, 'lr_features.joblib'))
     joblib.dump(defaults, os.path.join(models_dir, 'lr_defaults.joblib'))
     joblib.dump(metadata, os.path.join(models_dir, 'lr_metadata.joblib'))
-    print(f"[SAVED] Saved model artifacts to: {models_dir}")
+    print(f"[SAVED] LR model artifacts saved to: {models_dir}")
     return metadata
 
 

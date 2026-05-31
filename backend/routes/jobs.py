@@ -234,21 +234,66 @@ def company_or_admin_required(fn):
     return wrapper
 
 
+def _notify_matching_alumni(db, job_id, title, category, company_name):
+    """Send a notification to every alumni whose course matches the new job."""
+    cat_lower = (category or '').lower().strip()
+    title_lower = (title or '').lower()
+
+    # Collect all program codes that match this job
+    matched_programs = set()
+    for cat_key, programs in CATEGORY_PROGRAM_MAP.items():
+        if cat_key in cat_lower:
+            matched_programs.update(programs)
+
+    # Also match via title keywords
+    for prog, keywords in KEYWORD_MAP.items():
+        if any(kw in title_lower for kw in keywords):
+            matched_programs.add(prog)
+
+    if not matched_programs:
+        return 0
+
+    placeholders = ','.join('?' * len(matched_programs))
+    alumni = db.execute(
+        f"SELECT id, course FROM users WHERE role = 'alumni' AND UPPER(TRIM(course)) IN ({placeholders})",
+        list(matched_programs),
+    ).fetchall()
+
+    count = 0
+    for a in alumni:
+        db.execute(
+            """INSERT INTO notifications (user_id, title, message)
+               VALUES (?, ?, ?)""",
+            [a['id'],
+             f'New Job Match: {title}',
+             f'{company_name} posted "{title}" — it matches your {a["course"]} program. Check Browse Jobs now!'],
+        )
+        count += 1
+    return count
+
+
 @jobs_bp.route('', methods=['POST'])
 @company_or_admin_required
 def create_job():
     data = request.get_json()
     db = get_db()
+    title = data.get('title', '')
+    category = data.get('category', '')
+    company_name = data.get('company', '')
     cur = db.execute("""
-        INSERT INTO jobs (title, company_id, company_name, type, location, salary, description, status)
-        VALUES (?,?,?,?,?,?,?,?)
+        INSERT INTO jobs (title, company_id, company_name, type, location, salary, description, category, status)
+        VALUES (?,?,?,?,?,?,?,?,?)
     """, [
-        data.get('title'), data.get('company_id'), data.get('company'),
+        title, data.get('company_id'), company_name,
         data.get('type', 'Full-time'), data.get('location', ''),
         data.get('salary', ''), data.get('description', ''),
-        data.get('status', 'Open'),
+        category, data.get('status', 'Open'),
     ])
     db.commit()
+    # Notify matching alumni about the new job posting
+    if data.get('status', 'Open') == 'Open':
+        notified = _notify_matching_alumni(db, cur.lastrowid, title, category, company_name)
+        db.commit()
     return jsonify({'message': 'Job created', 'id': cur.lastrowid}), 201
 
 
@@ -274,5 +319,140 @@ def delete_job(job_id):
     db = get_db()
     db.execute('DELETE FROM jobs WHERE id = ?', [job_id])
     db.execute('DELETE FROM saved_jobs WHERE job_id = ?', [job_id])
+    db.execute('DELETE FROM job_applications WHERE job_id = ?', [job_id])
     db.commit()
     return jsonify({'message': 'Job deleted'}), 200
+
+
+# ── Job Applications ──────────────────────────────────────────────────────────
+
+@jobs_bp.route('/<int:job_id>/apply', methods=['POST'])
+@jwt_required()
+def apply_job(job_id):
+    user_id = get_jwt_identity()
+    db = get_db()
+
+    user = db.execute("SELECT role FROM users WHERE id = ?", [user_id]).fetchone()
+    if not user or user['role'] != 'alumni':
+        return jsonify({'error': 'Only alumni can apply for jobs'}), 403
+
+    job = db.execute("SELECT * FROM jobs WHERE id = ? AND status = 'Open'", [job_id]).fetchone()
+    if not job:
+        return jsonify({'error': 'Job not found or not open'}), 404
+
+    data = request.get_json(silent=True) or {}
+    cover_letter = data.get('cover_letter', '')
+
+    try:
+        db.execute(
+            "INSERT INTO job_applications (user_id, job_id, cover_letter) VALUES (?, ?, ?)",
+            [user_id, job_id, cover_letter],
+        )
+        db.commit()
+    except Exception:
+        return jsonify({'error': 'You have already applied for this job'}), 409
+
+    # Notify company users linked to this job
+    applicant = db.execute(
+        "SELECT first_name, last_name, course FROM users WHERE id = ?", [user_id]
+    ).fetchone()
+    applicant_name = f"{applicant['first_name']} {applicant['last_name']}".strip() if applicant else 'An alumni'
+    course = applicant['course'] if applicant else ''
+    if job['company_id']:
+        company_users = db.execute(
+            "SELECT id FROM users WHERE company_id = ? AND role = 'company'",
+            [job['company_id']]
+        ).fetchall()
+        for cu in company_users:
+            db.execute(
+                "INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)",
+                [cu['id'],
+                 f'New Application: {job["title"]}',
+                 f'{applicant_name} ({course}) applied for "{job["title"]}". Review in Job Postings.']
+            )
+        db.commit()
+
+    return jsonify({'message': 'Application submitted'}), 201
+
+
+@jobs_bp.route('/applications', methods=['GET'])
+@jwt_required()
+def my_applications():
+    user_id = get_jwt_identity()
+    db = get_db()
+    rows = db.execute("""
+        SELECT ja.id, ja.status, ja.cover_letter, ja.applied_at, ja.updated_at,
+               j.id AS job_id, j.title, j.company_name AS company, j.type,
+               j.location, j.salary, j.category, j.status AS job_status
+        FROM job_applications ja
+        JOIN jobs j ON ja.job_id = j.id
+        WHERE ja.user_id = ?
+        ORDER BY ja.applied_at DESC
+    """, [user_id]).fetchall()
+    return jsonify({'applications': [dict(r) for r in rows]}), 200
+
+
+@jobs_bp.route('/applications/<int:app_id>', methods=['DELETE'])
+@jwt_required()
+def withdraw_application(app_id):
+    user_id = get_jwt_identity()
+    db = get_db()
+    app_row = db.execute(
+        "SELECT * FROM job_applications WHERE id = ? AND user_id = ?", [app_id, user_id]
+    ).fetchone()
+    if not app_row:
+        return jsonify({'error': 'Application not found'}), 404
+    if app_row['status'] not in ('Pending',):
+        return jsonify({'error': 'Cannot withdraw an application that has been reviewed'}), 400
+
+    db.execute("DELETE FROM job_applications WHERE id = ?", [app_id])
+    db.commit()
+    return jsonify({'message': 'Application withdrawn'}), 200
+
+
+@jobs_bp.route('/applications/<int:app_id>/status', methods=['PUT'])
+@company_or_admin_required
+def update_application_status(app_id):
+    db = get_db()
+    data = request.get_json() or {}
+    new_status = data.get('status', '')
+    if new_status not in ('Accepted', 'Rejected', 'Pending'):
+        return jsonify({'error': 'Status must be Accepted, Rejected, or Pending'}), 400
+
+    app_row = db.execute(
+        "SELECT ja.*, j.title, j.company_name FROM job_applications ja JOIN jobs j ON ja.job_id = j.id WHERE ja.id = ?",
+        [app_id]
+    ).fetchone()
+    if not app_row:
+        return jsonify({'error': 'Application not found'}), 404
+
+    db.execute(
+        "UPDATE job_applications SET status = ?, updated_at = datetime('now') WHERE id = ?",
+        [new_status, app_id],
+    )
+    # Notify the applicant
+    msg = (
+        f'Your application for "{app_row["title"]}" at {app_row["company_name"]} has been {new_status.lower()}.'
+    )
+    db.execute(
+        "INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)",
+        [app_row['user_id'], f'Application {new_status}', msg],
+    )
+    db.commit()
+    return jsonify({'message': f'Application marked as {new_status}'}), 200
+
+
+@jobs_bp.route('/<int:job_id>/applicants', methods=['GET'])
+@company_or_admin_required
+def job_applicants(job_id):
+    db = get_db()
+    rows = db.execute("""
+        SELECT ja.id, ja.status, ja.cover_letter, ja.applied_at,
+               u.id AS user_id, u.first_name, u.last_name, u.email,
+               u.course, u.graduation_year, u.avg_grade, u.soft_skills, u.hard_skills
+        FROM job_applications ja
+        JOIN users u ON ja.user_id = u.id
+        WHERE ja.job_id = ?
+        ORDER BY ja.applied_at DESC
+    """, [job_id]).fetchall()
+    return jsonify({'applicants': [dict(r) for r in rows], 'total': len(rows)}), 200

@@ -11,7 +11,7 @@ import FeedbackForm from './pages/alumni/FeedbackForm'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import UploadModel from './pages/admin/UploadModel'
 import Forecasting from './pages/admin/Forecasting'
-import PredictUpcoming from './pages/admin/PredictUpcoming'
+import Predict from './pages/admin/Predict'
 import EmploymentComparison from './pages/admin/EmploymentComparison'
 import PredictReport from './pages/admin/PredictReport'
 import VoterConfig from './pages/admin/VoterConfig'
@@ -46,7 +46,7 @@ export default function App() {
         {/* Admin routes */}
         <Route path="/admin/dashboard"             element={<AdminDashboard />} />
         <Route path="/admin/forecasting"      element={<Forecasting />} />
-        <Route path="/admin/predict-upcoming" element={<PredictUpcoming />} />
+        <Route path="/admin/predict"          element={<Predict />} />
 
         <Route path="/admin/employment-comparison" element={<EmploymentComparison />} />
         <Route path="/admin/predict-report"        element={<PredictReport />} />

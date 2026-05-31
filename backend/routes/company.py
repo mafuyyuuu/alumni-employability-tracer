@@ -3,6 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from database import get_db
 from functools import wraps
 import bcrypt
+from routes.jobs import _notify_matching_alumni
 
 company_bp = Blueprint('company', __name__)
 
@@ -113,16 +114,22 @@ def create_job():
     company_id = user['company_id']
     company_name = user['company_name'] or data.get('company', '')
 
+    title = data.get('title', '')
+    category = data.get('category', '')
+    status = data.get('status', 'Open')
     cur = db.execute("""
         INSERT INTO jobs (title, company_id, company_name, type, location, salary, description, category, status)
         VALUES (?,?,?,?,?,?,?,?,?)
     """, [
-        data.get('title', ''), company_id, company_name,
+        title, company_id, company_name,
         data.get('type', 'Full-time'), data.get('location', ''),
         data.get('salary', ''), data.get('description', ''),
-        data.get('category', ''), data.get('status', 'Open'),
+        category, status,
     ])
     db.commit()
+    if status == 'Open':
+        _notify_matching_alumni(db, cur.lastrowid, title, category, company_name)
+        db.commit()
     return jsonify({'message': 'Job posted', 'id': cur.lastrowid}), 201
 
 
@@ -174,8 +181,71 @@ def delete_job(job_id):
 
     db.execute('DELETE FROM jobs WHERE id = ?', [job_id])
     db.execute('DELETE FROM saved_jobs WHERE job_id = ?', [job_id])
+    db.execute('DELETE FROM job_applications WHERE job_id = ?', [job_id])
     db.commit()
     return jsonify({'message': 'Job deleted'}), 200
+
+
+@company_bp.route('/jobs/<int:job_id>/applicants', methods=['GET'])
+@company_required
+def job_applicants(job_id):
+    user_id = get_jwt_identity()
+    db = get_db()
+    user = _company_user(db, user_id)
+    if not user or not user['company_id']:
+        return jsonify({'error': 'No company linked'}), 400
+
+    job = db.execute('SELECT id, title FROM jobs WHERE id = ? AND company_id = ?',
+                     [job_id, user['company_id']]).fetchone()
+    if not job:
+        return jsonify({'error': 'Job not found or not yours'}), 404
+
+    rows = db.execute("""
+        SELECT ja.id, ja.status, ja.cover_letter, ja.applied_at,
+               u.id AS user_id, u.first_name, u.last_name, u.email,
+               u.course, u.graduation_year, u.avg_grade, u.soft_skills, u.hard_skills
+        FROM job_applications ja
+        JOIN users u ON ja.user_id = u.id
+        WHERE ja.job_id = ?
+        ORDER BY ja.applied_at DESC
+    """, [job_id]).fetchall()
+    return jsonify({'job_title': job['title'], 'applicants': [dict(r) for r in rows], 'total': len(rows)}), 200
+
+
+@company_bp.route('/applications/<int:app_id>/status', methods=['PUT'])
+@company_required
+def update_application_status(app_id):
+    user_id = get_jwt_identity()
+    db = get_db()
+    user = _company_user(db, user_id)
+    if not user or not user['company_id']:
+        return jsonify({'error': 'No company linked'}), 400
+
+    data = request.get_json() or {}
+    new_status = data.get('status', '')
+    if new_status not in ('Accepted', 'Rejected', 'Pending'):
+        return jsonify({'error': 'Invalid status'}), 400
+
+    app_row = db.execute("""
+        SELECT ja.*, j.title, j.company_name
+        FROM job_applications ja
+        JOIN jobs j ON ja.job_id = j.id
+        WHERE ja.id = ? AND j.company_id = ?
+    """, [app_id, user['company_id']]).fetchone()
+    if not app_row:
+        return jsonify({'error': 'Application not found'}), 404
+
+    db.execute(
+        "UPDATE job_applications SET status = ?, updated_at = datetime('now') WHERE id = ?",
+        [new_status, app_id],
+    )
+    msg = f'Your application for "{app_row["title"]}" at {app_row["company_name"]} has been {new_status.lower()}.'
+    db.execute(
+        "INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)",
+        [app_row['user_id'], f'Application {new_status}', msg],
+    )
+    db.commit()
+    return jsonify({'message': f'Application marked as {new_status}'}), 200
 
 
 @company_bp.route('/profile', methods=['GET'])

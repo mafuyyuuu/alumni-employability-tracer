@@ -4,6 +4,7 @@ import AlumniLayout from '../../components/alumni/AlumniLayout'
 import {
   MdSearch, MdLocationOn, MdBookmarkBorder, MdBookmark, MdWork,
   MdStar, MdExpandMore, MdExpandLess, MdBusiness, MdClose,
+  MdSend, MdCheckCircle, MdCancel, MdHourglassEmpty,
 } from 'react-icons/md'
 import api from '../../services/api'
 import { useAuth } from '../../context/AuthContext'
@@ -15,7 +16,7 @@ const typeStyle = {
   'Internship': { background: '#fdf4ff', color: '#9333ea' },
 }
 
-const TABS = ['For You', 'All Jobs']
+const TABS = ['For You', 'All Jobs', 'My Applications']
 const PAGE_SIZE = 50
 
 function normalizeQuery(value = '') {
@@ -87,9 +88,24 @@ function getPageRange(current, total, width = 5) {
   return Array.from({ length: end - start + 1 }, (_, i) => start + i)
 }
 
-function JobCard({ job, isSaved, onSave }) {
+const appStatusStyle = {
+  Pending:  { bg: '#fffbeb', color: '#b45309', icon: MdHourglassEmpty, label: 'Pending' },
+  Accepted: { bg: '#f0fdf4', color: '#15803d', icon: MdCheckCircle,    label: 'Accepted' },
+  Rejected: { bg: '#fef2f2', color: '#dc2626', icon: MdCancel,         label: 'Rejected' },
+}
+
+function JobCard({ job, isSaved, onSave, appliedStatus, onApply, onWithdraw }) {
   const [expanded, setExpanded] = useState(false)
+  const [applying, setApplying] = useState(false)
   const matchColor = job.skill_match >= 85 ? '#0f2d1a' : job.skill_match >= 60 ? '#f59e0b' : '#ef4444'
+
+  async function handleApply() {
+    setApplying(true)
+    await onApply(job)
+    setApplying(false)
+  }
+
+  const statusInfo = appliedStatus ? appStatusStyle[appliedStatus] : null
 
   return (
     <div className="bg-white rounded-2xl overflow-hidden transition-all"
@@ -127,7 +143,7 @@ function JobCard({ job, isSaved, onSave }) {
               )}
             </div>
           </div>
-          
+
           <div className="flex items-center flex-wrap gap-2 mt-2">
             <span className="text-xs font-semibold px-2.5 py-1 rounded-full"
               style={typeStyle[job.type] || typeStyle['Full-time']}>
@@ -140,14 +156,37 @@ function JobCard({ job, isSaved, onSave }) {
           </div>
 
           <div className="flex items-center gap-3 mt-3">
-             <button onClick={() => setExpanded(p => !p)}
-                className="flex items-center gap-0.5 text-xs font-semibold transition-colors"
-                style={{ color: '#0f2d1a' }}>
-                {expanded ? <><MdExpandLess /> Hide Analysis</> : <><MdExpandMore /> View Analysis</>}
-              </button>
-              <div className="h-1 flex-1 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full transition-all" style={{ width: `${job.skill_match}%`, background: matchColor }} />
+            <button onClick={() => setExpanded(p => !p)}
+              className="flex items-center gap-0.5 text-xs font-semibold transition-colors"
+              style={{ color: '#0f2d1a' }}>
+              {expanded ? <><MdExpandLess /> Hide Analysis</> : <><MdExpandMore /> View Analysis</>}
+            </button>
+            <div className="h-1 flex-1 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-full transition-all" style={{ width: `${job.skill_match}%`, background: matchColor }} />
+            </div>
+
+            {/* Apply / status button */}
+            {statusInfo ? (
+              <div className="flex items-center gap-1.5">
+                <span className="flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full"
+                  style={{ background: statusInfo.bg, color: statusInfo.color }}>
+                  <statusInfo.icon className="text-xs" />{statusInfo.label}
+                </span>
+                {appliedStatus === 'Pending' && (
+                  <button onClick={() => onWithdraw(job)}
+                    className="text-[10px] font-semibold text-gray-400 hover:text-red-500 transition-colors">
+                    Withdraw
+                  </button>
+                )}
               </div>
+            ) : (
+              <button onClick={handleApply} disabled={applying || job.status !== 'Open'}
+                className="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full transition-all disabled:opacity-50"
+                style={{ background: '#0f2d1a', color: '#fff' }}>
+                <MdSend className="text-xs" />
+                {applying ? 'Applying…' : 'Apply'}
+              </button>
+            )}
           </div>
 
           {expanded && (
@@ -190,6 +229,53 @@ function JobCard({ job, isSaved, onSave }) {
   )
 }
 
+const appStatusBadge = {
+  Pending:  { bg: '#fffbeb', color: '#b45309', icon: MdHourglassEmpty },
+  Accepted: { bg: '#f0fdf4', color: '#15803d', icon: MdCheckCircle },
+  Rejected: { bg: '#fef2f2', color: '#dc2626', icon: MdCancel },
+}
+
+function ApplicationCard({ app, onWithdraw }) {
+  const s = appStatusBadge[app.status] || appStatusBadge.Pending
+  const Icon = s.icon
+  return (
+    <div className="bg-white rounded-2xl p-4 flex items-start gap-4"
+      style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+      <div className="w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+        style={{ background: '#0f2d1a' }}>
+        {(app.company || '?')[0]}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-bold text-gray-900">{app.title}</h3>
+            <p className="text-xs font-medium mt-0.5" style={{ color: '#0f2d1a' }}>{app.company}</p>
+          </div>
+          <span className="flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0"
+            style={{ background: s.bg, color: s.color }}>
+            <Icon className="text-xs" />{app.status}
+          </span>
+        </div>
+        <div className="flex items-center flex-wrap gap-2 mt-2">
+          <span className="text-xs font-semibold px-2.5 py-1 rounded-full"
+            style={typeStyle[app.type] || typeStyle['Full-time']}>{app.type}</span>
+          <span className="text-xs text-gray-500 flex items-center gap-0.5">
+            <MdLocationOn className="text-xs" />{app.location}
+          </span>
+          {app.salary && <span className="text-xs text-gray-500">{app.salary}</span>}
+          <span className="text-xs text-gray-400 ml-auto">Applied {app.applied_at?.slice(0, 10)}</span>
+        </div>
+        {app.status === 'Pending' && (
+          <button onClick={() => onWithdraw(app)}
+            className="mt-2 text-xs font-semibold text-gray-400 hover:text-red-500 transition-colors">
+            Withdraw application
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function BrowseJobs() {
   const { user } = useAuth()
   const course = user?.course || ''
@@ -203,7 +289,11 @@ export default function BrowseJobs() {
   const [allJobs, setAllJobs] = useState([])
   const [jobs, setJobs] = useState([])
   const [savedIds, setSavedIds] = useState(new Set())
+  // appliedMap: { job_id -> { app_id, status } }
+  const [appliedMap, setAppliedMap] = useState({})
+  const [myApplications, setMyApplications] = useState([])
   const [loading, setLoading] = useState(true)
+  const [appsLoading, setAppsLoading] = useState(false)
   const [forYouPage, setForYouPage] = useState(1)
   const [allJobsPage, setAllJobsPage] = useState(1)
   const [jobKeyword, setJobKeyword] = useState(normalizeQuery(companyParam))
@@ -252,6 +342,49 @@ export default function BrowseJobs() {
       setSavedIds(new Set((r.data.jobs || []).map(j => j.id)))
     }).catch(() => {})
   }, [])
+
+  function fetchApplications() {
+    setAppsLoading(true)
+    api.get('/jobs/applications').then(r => {
+      const apps = r.data.applications || []
+      setMyApplications(apps)
+      const map = {}
+      apps.forEach(a => { map[a.job_id] = { app_id: a.id, status: a.status } })
+      setAppliedMap(map)
+    }).catch(() => {}).finally(() => setAppsLoading(false))
+  }
+
+  useEffect(() => { fetchApplications() }, [])
+
+  async function handleApply(job) {
+    try {
+      await api.post(`/jobs/${job.id}/apply`, {})
+      fetchApplications()
+    } catch (err) {
+      const msg = err.response?.data?.error || ''
+      if (msg.toLowerCase().includes('already applied')) {
+        fetchApplications()
+      } else {
+        alert(msg || 'Failed to apply. Please try again.')
+      }
+    }
+  }
+
+  async function handleWithdrawFromCard(job) {
+    const entry = appliedMap[job.id]
+    if (!entry) return
+    try {
+      await api.delete(`/jobs/applications/${entry.app_id}`)
+      fetchApplications()
+    } catch {}
+  }
+
+  async function handleWithdrawFromList(app) {
+    try {
+      await api.delete(`/jobs/applications/${app.id}`)
+      fetchApplications()
+    } catch {}
+  }
 
   function toggleSave(job) {
     if (savedIds.has(job.id)) {
@@ -359,6 +492,10 @@ export default function BrowseJobs() {
                 <span className="ml-1.5 text-xs font-black px-1.5 py-0.5 rounded-full"
                   style={{ background: '#e6ede8', color: '#0f2d1a' }}>{recommendedJobs.length}</span>
               )}
+              {i === 2 && myApplications.length > 0 && (
+                <span className="ml-1.5 text-xs font-black px-1.5 py-0.5 rounded-full"
+                  style={{ background: '#e6ede8', color: '#0f2d1a' }}>{myApplications.length}</span>
+              )}
               {tab === i && (
                 <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full" style={{ background: '#0f2d1a' }} />
               )}
@@ -369,95 +506,132 @@ export default function BrowseJobs() {
 
       {/* Content */}
       <div className="px-4 sm:px-6 py-5 flex flex-col md:flex-row gap-5 page-enter">
-        {/* Filters (only for All Jobs) */}
-        {tab === 1 && (
-          <div className="w-full md:w-52 md:flex-shrink-0">
-            <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-              <h3 className="text-sm font-bold text-gray-900 mb-4">Filters</h3>
-              <div className="mb-4">
-                <p className="text-xs font-semibold mb-2.5 uppercase tracking-wider" style={{ color: '#0f2d1a' }}>Job Type</p>
-                {['Full-time', 'Part-time', 'Contract', 'Internship'].map(type => (
-                  <label key={type} className="flex items-center gap-2.5 mb-2.5 cursor-pointer">
-                    <div className="w-4 h-4 rounded flex items-center justify-center border transition-all flex-shrink-0"
-                      style={{ background: jobTypes.includes(type) ? '#0f2d1a' : 'white', borderColor: jobTypes.includes(type) ? '#0f2d1a' : '#d1d5db' }}
-                      onClick={() => toggleJobType(type)}>
-                      {jobTypes.includes(type) && (
-                        <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 10 10">
-                          <path d="M1.5 5l2.5 2.5L8.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      )}
-                    </div>
-                    <span className="text-xs text-gray-600">{type}</span>
-                  </label>
-                ))}
-              </div>
-              {jobTypes.length > 0 && (
-                <button onClick={() => setJobTypes([])}
-                  className="w-full py-2 rounded-xl text-xs font-bold border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors">
-                  Clear ({jobTypes.length})
+
+        {/* My Applications tab */}
+        {tab === 2 && (
+          <div className="flex-1 space-y-3">
+            <p className="text-sm text-gray-500 mb-1">
+              <span className="font-semibold text-gray-900">{myApplications.length}</span> application{myApplications.length !== 1 ? 's' : ''} submitted
+            </p>
+            {appsLoading && <p className="text-sm text-gray-400 py-8 text-center">Loading…</p>}
+            {!appsLoading && myApplications.length === 0 && (
+              <div className="bg-white rounded-2xl py-16 text-center" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                <MdSend className="text-3xl text-gray-300 mx-auto mb-2" />
+                <p className="text-sm text-gray-400">You haven't applied for any jobs yet</p>
+                <button onClick={() => setTab(0)} className="mt-3 text-xs font-semibold px-4 py-2 rounded-xl"
+                  style={{ background: '#0f2d1a', color: '#fff' }}>
+                  Browse Jobs
                 </button>
-              )}
-            </div>
+              </div>
+            )}
+            {!appsLoading && myApplications.map(app => (
+              <ApplicationCard key={app.id} app={app} onWithdraw={handleWithdrawFromList} />
+            ))}
           </div>
         )}
 
-        {/* Job list */}
-        <div className="flex-1 space-y-3">
-          <div className="flex items-center justify-between mb-1">
-            {tab === 0 && (
-              <p className="text-sm text-gray-500">
-                <span className="font-semibold text-gray-900">{recommendedJobs.length}</span> jobs matched to <span className="font-semibold" style={{ color: '#0f2d1a' }}>{course || 'your profile'}</span>
-              </p>
-            )}
+        {/* For You / All Jobs tabs */}
+        {tab !== 2 && (
+          <>
+            {/* Filters (only for All Jobs) */}
             {tab === 1 && (
-              <p className="text-sm text-gray-500">
-                <span className="font-semibold text-gray-900">{sortedAllJobs.length}</span> open jobs available
-              </p>
+              <div className="w-full md:w-52 md:flex-shrink-0">
+                <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                  <h3 className="text-sm font-bold text-gray-900 mb-4">Filters</h3>
+                  <div className="mb-4">
+                    <p className="text-xs font-semibold mb-2.5 uppercase tracking-wider" style={{ color: '#0f2d1a' }}>Job Type</p>
+                    {['Full-time', 'Part-time', 'Contract', 'Internship'].map(type => (
+                      <label key={type} className="flex items-center gap-2.5 mb-2.5 cursor-pointer">
+                        <div className="w-4 h-4 rounded flex items-center justify-center border transition-all flex-shrink-0"
+                          style={{ background: jobTypes.includes(type) ? '#0f2d1a' : 'white', borderColor: jobTypes.includes(type) ? '#0f2d1a' : '#d1d5db' }}
+                          onClick={() => toggleJobType(type)}>
+                          {jobTypes.includes(type) && (
+                            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 10 10">
+                              <path d="M1.5 5l2.5 2.5L8.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          )}
+                        </div>
+                        <span className="text-xs text-gray-600">{type}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {jobTypes.length > 0 && (
+                    <button onClick={() => setJobTypes([])}
+                      className="w-full py-2 rounded-xl text-xs font-bold border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors">
+                      Clear ({jobTypes.length})
+                    </button>
+                  )}
+                </div>
+              </div>
             )}
-          </div>
 
-          {loading && <p className="text-sm text-gray-400 py-8 text-center">Loading…</p>}
+            {/* Job list */}
+            <div className="flex-1 space-y-3">
+              <div className="flex items-center justify-between mb-1">
+                {tab === 0 && (
+                  <p className="text-sm text-gray-500">
+                    <span className="font-semibold text-gray-900">{recommendedJobs.length}</span> jobs matched to <span className="font-semibold" style={{ color: '#0f2d1a' }}>{course || 'your profile'}</span>
+                  </p>
+                )}
+                {tab === 1 && (
+                  <p className="text-sm text-gray-500">
+                    <span className="font-semibold text-gray-900">{sortedAllJobs.length}</span> open jobs available
+                  </p>
+                )}
+              </div>
 
-          {!loading && displayJobs.length === 0 && (
-            <div className="bg-white rounded-2xl py-16 text-center" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-              <MdWork className="text-3xl text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-400">
-                {tab === 0 ? 'No program-matched jobs found' : 'No jobs found'}
-              </p>
-            </div>
-          )}
+              {loading && <p className="text-sm text-gray-400 py-8 text-center">Loading…</p>}
 
-          {!loading && displayJobs.map(job => (
-            <JobCard key={job.id} job={job} isSaved={savedIds.has(job.id)} onSave={toggleSave} />
-          ))}
+              {!loading && displayJobs.length === 0 && (
+                <div className="bg-white rounded-2xl py-16 text-center" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                  <MdWork className="text-3xl text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400">
+                    {tab === 0 ? 'No program-matched jobs found' : 'No jobs found'}
+                  </p>
+                </div>
+              )}
 
-          {!loading && totalPages > 1 && (
-            <div className="pt-2 flex items-center gap-1.5 flex-wrap">
-              <button
-                onClick={() => { if (tab === 0) setForYouPage(p => Math.max(1, p - 1)); else setAllJobsPage(p => Math.max(1, p - 1)) }}
-                disabled={currentPage === 1}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-200 disabled:opacity-40">
-                Prev
-              </button>
-              {pageRange.map(pageNum => (
-                <button key={pageNum}
-                  onClick={() => { if (tab === 0) setForYouPage(pageNum); else setAllJobsPage(pageNum) }}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors"
-                  style={pageNum === currentPage
-                    ? { background: '#0f2d1a', color: '#fff', borderColor: '#0f2d1a' }
-                    : { background: '#fff', color: '#4b5563', borderColor: '#e5e7eb' }}>
-                  {pageNum}
-                </button>
+              {!loading && displayJobs.map(job => (
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  isSaved={savedIds.has(job.id)}
+                  onSave={toggleSave}
+                  appliedStatus={appliedMap[job.id]?.status || null}
+                  onApply={handleApply}
+                  onWithdraw={handleWithdrawFromCard}
+                />
               ))}
-              <button
-                onClick={() => { if (tab === 0) setForYouPage(p => Math.min(totalPages, p + 1)); else setAllJobsPage(p => Math.min(totalPages, p + 1)) }}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-200 disabled:opacity-40">
-                Next
-              </button>
+
+              {!loading && totalPages > 1 && (
+                <div className="pt-2 flex items-center gap-1.5 flex-wrap">
+                  <button
+                    onClick={() => { if (tab === 0) setForYouPage(p => Math.max(1, p - 1)); else setAllJobsPage(p => Math.max(1, p - 1)) }}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-200 disabled:opacity-40">
+                    Prev
+                  </button>
+                  {pageRange.map(pageNum => (
+                    <button key={pageNum}
+                      onClick={() => { if (tab === 0) setForYouPage(pageNum); else setAllJobsPage(pageNum) }}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors"
+                      style={pageNum === currentPage
+                        ? { background: '#0f2d1a', color: '#fff', borderColor: '#0f2d1a' }
+                        : { background: '#fff', color: '#4b5563', borderColor: '#e5e7eb' }}>
+                      {pageNum}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => { if (tab === 0) setForYouPage(p => Math.min(totalPages, p + 1)); else setAllJobsPage(p => Math.min(totalPages, p + 1)) }}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-200 disabled:opacity-40">
+                    Next
+                  </button>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
     </AlumniLayout>
   )

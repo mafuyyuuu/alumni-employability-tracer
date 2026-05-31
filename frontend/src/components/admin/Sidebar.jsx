@@ -16,7 +16,7 @@ const sections = [
     label: 'Analytics',
     items: [
       { label: 'Forecasting',           to: '/admin/forecasting',           icon: MdShowChart },
-      { label: 'Predict Upcoming',      to: '/admin/predict-upcoming',      icon: MdAssessment },
+      { label: 'Predict',                to: '/admin/predict',               icon: MdAssessment },
       { label: 'Employment Comparison', to: '/admin/employment-comparison', icon: MdCompareArrows },
       { label: 'Predict & Report',      to: '/admin/predict-report',        icon: MdAssessment },
     ],
@@ -73,12 +73,12 @@ export default function Sidebar({ isOpen, onClose }) {
       </div>
 
       {/* Nav — scrollable */}
-      <div className="flex-1 pl-3 pr-4 py-2">
-        <nav className="space-y-5">
+      <div className="flex-1 pl-3 pr-4 py-2 overflow-y-auto min-h-0">
+        <nav className="space-y-3">
           {sections.map((section) => (
             <div key={section.label}>
               <p
-                className="text-xs font-semibold uppercase tracking-widest px-2 mb-1.5"
+                className="text-[10px] font-bold uppercase tracking-widest px-2 mb-1 mt-1"
                 style={{ color: 'rgba(255,255,255,0.28)' }}
               >
                 {section.label}
@@ -89,7 +89,7 @@ export default function Sidebar({ isOpen, onClose }) {
                   to={to}
                   onClick={onClose}
                   className={({ isActive }) =>
-                    `flex items-center gap-3 pl-3 pr-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 mb-0.5 ${
+                    `flex items-center gap-2.5 pl-2.5 pr-3 py-2 rounded-lg text-xs font-medium transition-all duration-150 mb-0.5 ${
                       isActive
                         ? 'text-white'
                         : 'text-gray-400 hover:text-white hover:bg-white/5'
@@ -101,8 +101,8 @@ export default function Sidebar({ isOpen, onClose }) {
                       : {}
                   }
                 >
-                  <Icon className="text-base flex-shrink-0" />
-                  <span className="text-xs">{label}</span>
+                  <Icon className="text-sm flex-shrink-0" />
+                  <span className="text-xs leading-tight">{label}</span>
                 </NavLink>
               ))}
             </div>

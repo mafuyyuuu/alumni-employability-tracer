@@ -1,48 +1,52 @@
 import { useEffect, useState } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import { MdRefresh } from 'react-icons/md'
+import { MdInfo } from 'react-icons/md'
 import api from '../../services/api'
 
-export default function VoterConfig() {
-  const [factors, setFactors] = useState([])
-  const [programs, setPrograms] = useState([]) // Array of {code, name}
-  const [program, setProgram] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+const FACTOR_DESC = {
+  gpa:          'General Weighted Average converted to a 0–100 scale.',
+  prof_grade:   'Capstone / thesis / professional subject grade.',
+  elec_grade:   'Elective or specialization subject average.',
+  ojt_grade:    'On-the-job training / internship performance grade.',
+  soft_skills:  'Communication, teamwork, and interpersonal skills score.',
+  hard_skills:  'Technical and domain-specific skills score.',
+  age:          'Age at graduation (minor influence).',
+  board_passer: 'Board / licensure exam result. Applies only to board-exam programs.',
+}
 
-  function loadFactors(nextProgram = program) {
-    setLoading(true)
-    setError('')
-    // Strictly use 'lr' as per institutional requirement
-    api.get('/admin/factors-configuration', { 
-      params: { 
-        model: 'lr', 
-        program: nextProgram || undefined 
-      } 
-    }).then(r => {
-      setFactors(r.data.factors || [])
-    }).catch(err => {
-      setError(err.response?.data?.error || 'Unable to load ML factor insights')
-      setFactors([])
-    }).finally(() => setLoading(false))
-  }
+export default function VoterConfig() {
+  const [factors, setFactors]               = useState([])
+  const [programs, setPrograms]             = useState([])
+  const [program, setProgram]               = useState('')
+  const [isBoardProgram, setIsBoardProgram] = useState(true)
+  const [boardPrograms, setBoardPrograms]   = useState([])
+  const [loading, setLoading]               = useState(true)
+  const [error, setError]                   = useState('')
 
   useEffect(() => {
-    api.get('/admin/programs').then(r => {
-      setPrograms(r.data.programs || [])
-    }).catch(() => {})
+    api.get('/admin/programs').then(r => setPrograms(r.data.programs || [])).catch(() => {})
   }, [])
 
-  useEffect(() => {
-    loadFactors(program)
-  }, [program])
+  function load(prog = program) {
+    setLoading(true)
+    setError('')
+    api.get('/admin/factors-config', { params: { program: prog || undefined } })
+      .then(r => {
+        setFactors(r.data.factors || [])
+        setIsBoardProgram(r.data.is_board_program)
+        setBoardPrograms(r.data.board_programs || [])
+      })
+      .catch(() => setError('Failed to load factors.'))
+      .finally(() => setLoading(false))
+  }
 
-  // Custom Bar Color based on weight
-  const getBarColor = (weight) => {
-    if (weight > 30) return '#0f2d1a'
-    if (weight > 15) return '#1b4d2e'
-    if (weight > 5) return '#2d6a4f'
+  useEffect(() => { load(program) }, [program])
+
+  const totalPct = factors.filter(f => f.enabled).reduce((s, f) => s + (f.pct || 0), 0)
+
+  const getBarColor = (pct) => {
+    if (pct >= 25) return '#0f2d1a'
+    if (pct >= 15) return '#2d6a4f'
     return '#52b788'
   }
 
@@ -50,148 +54,99 @@ export default function VoterConfig() {
     <AdminLayout>
       <div className="p-4 sm:p-6 page-enter">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Factors Configuration</h1>
-            <p className="text-sm text-gray-500 mt-1">Institutional drivers influencing employability predictions</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => loadFactors()}
-              className="p-2.5 text-emerald-900 bg-emerald-50 hover:bg-emerald-100 rounded-xl border border-emerald-100 transition-colors flex items-center gap-2 font-bold text-xs"
-            >
-              <MdRefresh size={18} /> Refresh Analysis
-            </button>
-          </div>
+        <div className="mb-6">
+          <h1 className="text-xl font-bold text-gray-900">Factors Configuration</h1>
+          <p className="text-sm text-gray-400 mt-0.5">Prediction factor weights used to compute employability scores</p>
         </div>
 
-        <div className="grid grid-cols-1 gap-6">
-          {/* Controls */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-            <div className="flex flex-col sm:flex-row gap-4 items-end">
-              <div className="flex-1 w-full">
-                <label className="block text-xs font-bold text-emerald-900 uppercase tracking-wider mb-2">Filter by Program</label>
-                <select
-                  value={program}
-                  onChange={e => setProgram(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                >
-                  <option value="">All University Programs</option>
-                  {programs.map(p => (
-                    <option key={p.code} value={p.code}>{p.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="hidden sm:block pb-1">
-                <p className="text-xs text-gray-400 italic">Showing top 10 weighted factors for the Linear Regression model</p>
-              </div>
-            </div>
+        {/* Program selector */}
+        <div className="bg-white rounded-2xl p-5 mb-5 border border-gray-100 shadow-sm">
+          <label className="block text-xs font-bold text-gray-600 mb-2 uppercase tracking-wide">Filter by Program</label>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => setProgram('')}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+              style={!program ? { background: '#0f2d1a', color: '#fff' } : { background: '#f3f4f6', color: '#374151' }}>
+              All Programs
+            </button>
+            {programs.map(p => (
+              <button key={p.code} onClick={() => setProgram(p.code)}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                style={program === p.code ? { background: '#0f2d1a', color: '#fff' } : { background: '#f3f4f6', color: '#374151' }}>
+                {p.code}
+              </button>
+            ))}
+          </div>
+          {program && (
+            <p className="mt-2 text-[11px]" style={{ color: isBoardProgram ? '#0f2d1a' : '#6b7280' }}>
+              {isBoardProgram
+                ? `${program} is a board exam program — Board/Licensure Passer factor is included.`
+                : `${program} does not include the Board/Licensure Passer factor.`}
+            </p>
+          )}
+        </div>
+
+        {/* Factors view */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="text-sm font-bold text-gray-900">Prediction Factors</h2>
+            <span className="text-xs text-gray-400">Total: <span className="font-bold text-gray-700">{Math.round(totalPct)}%</span></span>
           </div>
 
-          {/* Main Chart */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 min-h-[500px]">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <h2 className="text-lg font-bold text-gray-900">
-                  Primary Drivers (Linear Regression)
-                  {program && <span className="text-emerald-600 ml-2">· {program}</span>}
-                </h2>
-                <p className="text-xs text-gray-500 mt-1">Weights represent the direct linear impact on employment probability</p>
-              </div>
+          {loading && <p className="py-12 text-center text-sm text-gray-400">Loading…</p>}
+          {error   && <p className="py-12 text-center text-sm text-red-500">{error}</p>}
+
+          {!loading && !error && (
+            <div className="divide-y divide-gray-50">
+              {factors.filter(f => f.enabled).map(f => (
+                <div key={f.key} className="px-5 py-4 flex items-center gap-4">
+                  {/* Factor info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <p className="text-sm font-semibold text-gray-800">{f.name}</p>
+                      {f.is_board_factor && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700">
+                          Board programs only
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-400">{FACTOR_DESC[f.key] || ''}</p>
+                  </div>
+
+                  {/* Weight bar */}
+                  <div className="w-48 hidden sm:flex items-center gap-2">
+                    <div className="flex-1 bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                      <div className="h-2.5 rounded-full transition-all"
+                        style={{ width: `${Math.min(f.pct, 100)}%`, background: getBarColor(f.pct) }} />
+                    </div>
+                  </div>
+
+                  {/* Weight badge */}
+                  <span className="text-sm font-black w-12 text-right flex-shrink-0" style={{ color: getBarColor(f.pct) }}>
+                    {f.pct}%
+                  </span>
+                </div>
+              ))}
             </div>
+          )}
+        </div>
 
-            {loading && (
-              <div className="flex flex-col items-center justify-center py-32">
-                <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                <p className="text-sm text-gray-400 font-medium">Analyzing factors...</p>
-              </div>
-            )}
-            
-            {!loading && error && (
-              <div className="text-center py-32">
-                <p className="text-sm text-red-500 bg-red-50 inline-block px-4 py-2 rounded-lg">{error}</p>
-              </div>
-            )}
-            
-            {!loading && !error && factors.length === 0 && (
-              <div className="text-center py-32">
-                <p className="text-sm text-gray-400">No factor insights available for this configuration.</p>
-              </div>
-            )}
-
-            {!loading && !error && factors.length > 0 && (
-              <div className="h-[450px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart 
-                    data={factors} 
-                    layout="vertical" 
-                    margin={{ top: 5, right: 60, left: 40, bottom: 5 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
-                    <XAxis
-                      type="number"
-                      domain={[0, 100]}
-                      tick={{ fontSize: 11, fill: '#94a3b8' }}
-                      axisLine={false}
-                      tickLine={false}
-                      tickFormatter={v => `${v}%`}
-                    />
-                    <YAxis
-                      type="category"
-                      dataKey="label"
-                      tick={{ fontSize: 13, fill: '#1e293b', fontWeight: 600 }}
-                      axisLine={false}
-                      tickLine={false}
-                      width={180}
-                    />
-                    <Tooltip 
-                      cursor={{ fill: '#f8fafc' }}
-                      content={({ active, payload }) => {
-                        if (active && payload && payload.length) {
-                          const data = payload[0].payload;
-                          return (
-                            <div className="bg-white p-4 shadow-xl border border-gray-100 rounded-xl">
-                              <p className="text-xs font-bold text-gray-400 uppercase mb-1">{data.label}</p>
-                              <div className="flex items-center gap-2">
-                                <span className="text-2xl font-black text-emerald-900">{data.weight}%</span>
-                                <span className="text-xs text-gray-500">Relative Weight</span>
-                              </div>
-                              <div className="mt-3 pt-3 border-t border-gray-50">
-                                <p className="text-[10px] text-gray-400 leading-relaxed max-w-[200px]">
-                                  {data.weight === 0 
-                                    ? "This factor has 0% impact because it has constant values in the current dataset. The model needs varied data (e.g., both passers and non-passers) to identify a pattern."
-                                    : "This coefficient indicates a direct linear relationship with employment probability."}
-                                </p>
-                              </div>
-                            </div>
-                          );
-                        }
-                        return null;
-                      }}
-                    />
-                    <Bar dataKey="weight" radius={[0, 6, 6, 0]} barSize={32}>
-                      {factors.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={getBarColor(entry.weight)} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </div>
-          
-          {/* Legend/Helper Footer */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100">
-              <h4 className="text-xs font-bold text-emerald-900 uppercase mb-1">Impact Level</h4>
-              <p className="text-[11px] text-emerald-700 leading-relaxed">
-                Darker bars indicate high-impact factors that the university should prioritize in curriculum or student support.
+        {/* Info footer */}
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-green-50 rounded-2xl p-4 border border-green-100 flex gap-3">
+            <MdInfo className="text-green-700 text-lg flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-bold text-green-900 mb-0.5">Board/Licensure Programs</p>
+              <p className="text-[11px] text-green-700">
+                Board/Licensure Passer factor applies to: {boardPrograms.join(', ')}.
               </p>
             </div>
-            <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100">
-              <h4 className="text-xs font-bold text-blue-900 uppercase mb-1">Statistical Method</h4>
-              <p className="text-[11px] text-blue-700 leading-relaxed">
-                Using Ordinary Least Squares (OLS) to identify clear, interpretable trends across graduate cohorts.
+          </div>
+          <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100 flex gap-3">
+            <MdInfo className="text-blue-700 text-lg flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-bold text-blue-900 mb-0.5">Score Formula</p>
+              <p className="text-[11px] text-blue-700">
+                Employability score = sum of (factor value × weight). Board bonus adds 15 points for licensure passers.
               </p>
             </div>
           </div>

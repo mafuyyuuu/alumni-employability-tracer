@@ -137,22 +137,72 @@ function TabUploadNew({ onUploaded, onStatusRefresh }) {
   )
 }
 
+function _yearFromFilename(filename) {
+  const m = filename.match(/\b(20\d{2})\b/)
+  return m ? parseInt(m[1], 10) : null
+}
+
 // ── Tab 1: Add Data to Existing Model ────────────────────────────────────────
 function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
   const currentYear = new Date().getFullYear()
   const [modelName, setModelName] = useState('')
   const [file, setFile] = useState(null)
   const [datasetYear, setDatasetYear] = useState(currentYear)
-  const [maxExistingYear, setMaxExistingYear] = useState(null)  // null = no records yet
+  const [maxExistingYear, setMaxExistingYear] = useState(null)
   const [yearsLoading, setYearsLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [done, setDone] = useState(false)
   const [applyToTraining, setApplyToTraining] = useState(true)
   const [retrainAfter, setRetrainAfter] = useState(true)
   const [createAccounts, setCreateAccounts] = useState(true)
+  const [skipEmail, setSkipEmail] = useState(false)
   const [conflict, setConflict] = useState(null)
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
+  const [trainingStatus, setTrainingStatus] = useState(null)
+  const [progress, setProgress] = useState(null) // {percent, message, stage}
+  const trainingPollRef = useRef(null)
+  const progressPollRef = useRef(null)
+
+  function stopPolling() {
+    if (trainingPollRef.current)  { clearInterval(trainingPollRef.current);  trainingPollRef.current = null }
+    if (progressPollRef.current)  { clearInterval(progressPollRef.current);  progressPollRef.current = null }
+  }
+
+  function startProgressPolling() {
+    if (progressPollRef.current) clearInterval(progressPollRef.current)
+    progressPollRef.current = setInterval(async () => {
+      try {
+        const r = await api.get('/admin/upload/progress')
+        const { stage, percent, message } = r.data
+        setProgress({ stage, percent, message })
+        if (stage === 'done' || stage === 'error') {
+          clearInterval(progressPollRef.current); progressPollRef.current = null
+        }
+      } catch { /* ignore */ }
+    }, 400)
+  }
+
+  function startTrainingPolling() {
+    if (trainingPollRef.current) clearInterval(trainingPollRef.current)
+    trainingPollRef.current = setInterval(async () => {
+      try {
+        const r = await api.get('/admin/training/status')
+        const s = r.data.status
+        setTrainingStatus(s)
+        if (s === 'done') {
+          clearInterval(trainingPollRef.current); trainingPollRef.current = null
+          setResult(prev => ({ ...prev, training: { ...prev?.training, forecast: r.data.result?.forecast, models: r.data.result } }))
+          onStatusRefresh()
+        } else if (s === 'error') {
+          clearInterval(trainingPollRef.current); trainingPollRef.current = null
+          setError(`Model training failed: ${r.data.error || 'Unknown error'}`)
+        }
+      } catch { clearInterval(trainingPollRef.current); trainingPollRef.current = null }
+    }, 2000)
+  }
+
+  useEffect(() => stopPolling, [])
 
   // Fetch existing years and lock the year picker to the next sequential year
   useEffect(() => {
@@ -184,6 +234,8 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
     if (!file) return
     setUploading(true)
     setError('')
+    setProgress({ stage: 'uploading', percent: 0, message: 'Uploading file…' })
+    startProgressPolling()
     try {
       const token = localStorage.getItem('token')
       const authHeader = { Authorization: `Bearer ${token}` }
@@ -208,19 +260,27 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
       onUploaded(data1.upload)
       setConflict(null)
 
-      // Step 2: create alumni accounts
+      // Step 2: create alumni accounts from the same file
       let accountResult = null
-      if (createAccounts && isCsv) {
+      if (createAccounts && applyToTraining) {
         const fd2 = new FormData()
         fd2.append('file', file)
+        fd2.append('dataset_year', String(datasetYear))
+        fd2.append('skip_email', String(skipEmail))
         const res2 = await fetch('/api/admin/users/bulk-import', { method: 'POST', headers: authHeader, body: fd2 })
         accountResult = await res2.json()
       }
 
       setResult({ training: data1, accounts: accountResult })
       setDone(true)
-      onStatusRefresh()
       if (applyToTraining) onYearsRefresh()
+
+      if (data1.training_async) {
+        setTrainingStatus('running')
+        startTrainingPolling()
+      } else {
+        onStatusRefresh()
+      }
     } catch (err) {
       setError(err.message || 'Upload failed. Please try again.')
     } finally {
@@ -229,8 +289,11 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
   }
 
   function reset() {
+    stopPolling()
     setFile(null); setModelName(''); setDone(false)
     setResult(null); setConflict(null); setError('')
+    setTrainingStatus(null); setProgress(null)
+    setCreateAccounts(true); setSkipEmail(false)
     setDatasetYear(nextAllowed ?? currentYear)
   }
 
@@ -286,7 +349,11 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
         </div>
       </div>
 
-      <DropZone selectedFile={file} onFile={f => { setFile(f); setDone(false); setResult(null); setConflict(null); setError('') }}
+      <DropZone selectedFile={file} onFile={f => {
+          setFile(f); setDone(false); setResult(null); setConflict(null); setError('')
+          const detected = _yearFromFilename(f.name)
+          if (detected) setDatasetYear(detected)
+        }}
         onClear={() => setFile(null)} uploadDone={done} onUploadAnother={reset} accept=".csv,.xlsx,.xls" />
 
       {error && (
@@ -340,13 +407,52 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
             <p className="text-xs font-bold text-green-900 mb-1">Alumni Account Options</p>
             <label className="flex items-center gap-2 text-xs text-green-900 font-medium">
               <input type="checkbox" checked={createAccounts} onChange={e => setCreateAccounts(e.target.checked)} />
-              Create alumni accounts from <code className="bg-green-100 px-1 rounded">Email</code> column
+              Create alumni accounts from dataset (deleted when year is removed)
             </label>
             {createAccounts && (
-              <p className="text-[11px] text-green-700 ml-5">
-                A random password is generated per account and sent to their email.
-              </p>
+              <>
+                <label className="flex items-center gap-2 text-xs text-green-900 ml-4">
+                  <input type="checkbox" checked={skipEmail} onChange={e => setSkipEmail(e.target.checked)} />
+                  Skip email sending <span className="text-green-600 font-semibold">(testing mode)</span>
+                </label>
+                <p className="text-[11px] text-green-700 ml-5">
+                  {skipEmail ? 'Accounts created with random password. No emails sent.' : 'Each alumni gets a random password sent to their email.'}
+                </p>
+              </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Progress bar */}
+      {progress && progress.stage !== 'idle' && (
+        <div className="mt-3 rounded-xl border border-gray-200 bg-white px-4 py-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs font-semibold text-gray-700">{progress.message || 'Processing…'}</span>
+            <span className="text-xs font-black" style={{ color: progress.stage === 'done' ? '#16a34a' : progress.stage === 'error' ? '#dc2626' : '#0f2d1a' }}>
+              {progress.percent}%
+            </span>
+          </div>
+          <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+            <div
+              className="h-2.5 rounded-full transition-all duration-300"
+              style={{
+                width: `${progress.percent}%`,
+                background: progress.stage === 'done' ? '#16a34a' : progress.stage === 'error' ? '#dc2626' : '#0f2d1a',
+              }}
+            />
+          </div>
+          <div className="flex gap-4 mt-2">
+            {[
+              { label: 'Upload', active: progress.stage === 'uploading', done: progress.percent >= 5 },
+              { label: 'Import rows', active: progress.stage === 'importing', done: progress.percent >= 60 },
+              { label: 'Train models', active: progress.stage === 'training', done: progress.stage === 'done' },
+            ].map(step => (
+              <div key={step.label} className="flex items-center gap-1">
+                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${step.done ? 'bg-green-500' : step.active ? 'bg-yellow-400 animate-pulse' : 'bg-gray-200'}`} />
+                <span className={`text-[10px] font-semibold ${step.done ? 'text-green-600' : step.active ? 'text-yellow-600' : 'text-gray-400'}`}>{step.label}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -420,22 +526,21 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
                   </div>
                 ))}
               </div>
-              {(result.accounts.created || []).length > 0 && (
-                <div className="max-h-32 overflow-y-auto space-y-1">
-                  {result.accounts.created.map((r, i) => (
-                    <div key={i} className="flex items-center justify-between bg-white rounded-lg px-3 py-1.5">
-                      <div>
-                        <p className="text-xs font-semibold text-gray-800">{r.name}</p>
-                        <p className="text-[11px] text-gray-500">{r.email}</p>
-                      </div>
-                      <span className="flex items-center gap-1 text-[11px] font-semibold"
-                        style={{ color: r.email_sent ? '#10b981' : '#f59e0b' }}>
-                        <MdEmail className="text-xs" />
-                        {r.email_sent ? 'Email sent' : 'Not sent'}
-                      </span>
-                    </div>
-                  ))}
+              {(result.accounts.created || []).slice(0, 5).map((r, i) => (
+                <div key={i} className="flex items-center justify-between bg-white rounded-lg px-3 py-1.5 mb-1">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-800">{r.name}</p>
+                    <p className="text-[11px] text-gray-500">{r.email}</p>
+                  </div>
+                  <span className="flex items-center gap-1 text-[11px] font-semibold"
+                    style={{ color: r.email_sent ? '#10b981' : '#f59e0b' }}>
+                    <MdEmail className="text-xs" />
+                    {r.email_sent ? 'Sent' : 'Not sent'}
+                  </span>
                 </div>
+              ))}
+              {(result.accounts.created || []).length > 5 && (
+                <p className="text-[11px] text-gray-400 text-center mt-1">+{result.accounts.created.length - 5} more</p>
               )}
             </div>
           )}
@@ -453,7 +558,7 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
             style={{ background: yearBlocked ? '#9ca3af' : '#0f2d1a' }}
             title={yearBlocked ? `Upload year ${nextAllowed} first` : ''}>
             {uploading
-              ? <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="white" strokeWidth="4" /><path className="opacity-75" fill="white" d="M4 12a8 8 0 018-8v8z" /></svg> Processing…</>
+              ? <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="white" strokeWidth="4" /><path className="opacity-75" fill="white" d="M4 12a8 8 0 018-8v8z" /></svg> Uploading…</>
               : `Upload ${datasetYear} Data`}
           </button>
         )}

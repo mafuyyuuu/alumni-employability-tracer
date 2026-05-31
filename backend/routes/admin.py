@@ -1,8 +1,10 @@
 import os
+import re
 import hashlib
 import random
 import string
 import smtplib
+import threading
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
@@ -35,6 +37,47 @@ from sklearn.linear_model import LinearRegression
 from functools import wraps
 
 admin_bp = Blueprint('admin', __name__)
+
+# ── Background job state ──────────────────────────────────────────────────────
+_training_job = {'status': 'idle', 'result': None, 'error': None}
+_training_lock = threading.Lock()
+
+_upload_progress = {'stage': 'idle', 'percent': 0, 'message': '', 'total': 0, 'done': 0}
+_upload_progress_lock = threading.Lock()
+
+def _set_progress(stage, percent, message='', total=0, done=0):
+    with _upload_progress_lock:
+        _upload_progress.update({'stage': stage, 'percent': percent,
+                                  'message': message, 'total': total, 'done': done})
+
+def _run_training_background(app, db_path, dataset_year):
+    global _training_job
+    try:
+        with app.app_context():
+            _set_progress('training', 65, 'Training Random Forest…')
+            rf_metadata = train_random_forest(database_path=db_path)
+            _set_progress('training', 82, 'Training Linear Regression…')
+            lr_metadata = train_linear_employability(database_path=db_path)
+            _set_progress('training', 93, 'Loading models…')
+            ml_predictor._load_models()
+            forecast = None
+            if dataset_year:
+                try:
+                    _set_progress('training', 96, 'Computing forecast…')
+                    forecast = _auto_forecast_3yr(get_db(), dataset_year)
+                except Exception:
+                    forecast = None
+            _set_progress('done', 100, 'Upload complete')
+            with _training_lock:
+                _training_job = {
+                    'status': 'done',
+                    'result': {'rf': rf_metadata, 'lr': lr_metadata, 'forecast': forecast},
+                    'error': None,
+                }
+    except Exception as exc:
+        _set_progress('error', 0, str(exc))
+        with _training_lock:
+            _training_job = {'status': 'error', 'result': None, 'error': str(exc)}
 
 
 def _send_welcome_email(to_email, name, password):
@@ -607,6 +650,8 @@ def data_health():
     critical_fields = ['age', 'avg_grade', 'soft_skills', 'hard_skills', 'ojt_grade', 'course']
     
     for field in critical_fields:
+        if field not in df.columns:
+            continue
         missing = df[field].isna().sum()
         if field == 'course':
             missing += (df[field] == 'UNKNOWN').sum()
@@ -724,27 +769,26 @@ def dashboard():
 @admin_required
 def list_users():
     db = get_db()
-    search    = request.args.get('search', '').lower()
-    filter_by = request.args.get('filter', 'All')
+    search       = request.args.get('search', '').lower()
+    filter_by    = request.args.get('filter', 'All')
+    year_filter  = request.args.get('year_filter', '')
+    course_filter = request.args.get('course_filter', '')
 
-    # 1. Fetch Registered Users
+    # Available years and programs for dropdown options
+    available_years   = [r['graduation_year'] for r in db.execute(
+        "SELECT DISTINCT graduation_year FROM ml_training_rows WHERE is_active=1 ORDER BY graduation_year DESC"
+    ).fetchall()]
+    available_courses = [r['course'] for r in db.execute(
+        "SELECT DISTINCT course FROM ml_training_rows WHERE is_active=1 AND course IS NOT NULL ORDER BY course"
+    ).fetchall()]
+
+    # 1. Fetch registered alumni
     reg_rows = db.execute("SELECT * FROM users WHERE role = 'alumni'").fetchall()
     reg_emails = {r['email'].lower() for r in reg_rows if r['email']}
 
-    # 2. Fetch Dataset Alumni (not yet registered)
+    # 2. Fetch dataset rows not already registered
     ds_rows = db.execute("SELECT * FROM ml_training_rows WHERE is_active = 1").fetchall()
 
-    # Combine them into a single list
-    all_rows = []
-    
-    # 1. Fetch Registered Users
-    reg_rows = db.execute("SELECT * FROM users WHERE role = 'alumni'").fetchall()
-    reg_emails = {r['email'].lower() for r in reg_rows if r['email']}
-
-    # 2. Fetch Dataset Alumni (not yet registered)
-    ds_rows = db.execute("SELECT * FROM ml_training_rows WHERE is_active = 1").fetchall()
-
-    # Combine them into a single list
     all_rows = []
     
     # Add registered ones first
@@ -769,7 +813,8 @@ def list_users():
             'email': r['email'] or f"ID: {r['source_row_id']}",
             'course': r['course'],
             'graduation_year': r['graduation_year'],
-            'account_status': 'Dataset',
+            'age': r['age'],
+            'account_status': 'Active',
             'employed': r['employed'],
             'avg_grade': r['avg_grade'],
             'soft_skills': r['soft_skills'],
@@ -780,12 +825,12 @@ def list_users():
             'board_passer': r['board_passer'],
             'board_exam_score': r['board_exam_score'],
             'months_to_employment': r['months_to_employment'],
-            'ncae_completed': True 
+            'ncae_completed': True,
         }
         all_rows.append(ds_user)
 
-    SCORE_THRESHOLD = 50  # high score ≥ 50
-    FAST_MONTHS     = 6   # fast employment ≤ 6 months
+    SCORE_THRESHOLD = 80  # high score ≥ 80
+    FAST_MONTHS     = 4   # fast employment ≤ 4 months
 
     # Latest uploaded dataset year = graduating students reference year
     lr = db.execute(
@@ -894,13 +939,15 @@ def list_users():
         months    = r['months_to_employment'] if 'months_to_employment' in keys else None
         grad_year = r['graduation_year']       if 'graduation_year'       in keys else None
 
-        # For graduating students: combine RF probability + k-NN months + score
-        # RF gates whether they can reach "Likely Employable" at all
-        if LATEST_YEAR and grad_year == LATEST_YEAR and not employed:
-            rf_p      = rf_probability if rf_probability is not None else 0.5
-            # high_score requires BOTH a good feature score AND RF says likely employed
-            high_s    = score >= SCORE_THRESHOLD and rf_p >= 0.5
-            fast_m    = pred_months is not None and pred_months <= FAST_MONTHS
+        rf_p = rf_probability if rf_probability is not None else 0.5
+
+        # Latest-year students (graduating/new alumni) — always use RF + score
+        if LATEST_YEAR and grad_year == LATEST_YEAR:
+            high_s = score >= SCORE_THRESHOLD and rf_p >= 0.5
+            if employed:
+                # Employed graduating students: already placed, use score+RF
+                return _tier(high_s, True)
+            fast_m = pred_months is not None and pred_months <= FAST_MONTHS
             return _tier(high_s, fast_m)
 
         # Historical employed alumni — use actual months + score
@@ -911,50 +958,83 @@ def list_users():
                 return 'Likely Employable' if high_s else 'Employable'
             return _tier(high_s, m <= FAST_MONTHS)
 
-        # Older unemployed alumni — score-only fallback
-        return 'Likely Employable' if score >= SCORE_THRESHOLD else 'Least Employable'
+        # Historical unemployed — RF probability + score
+        high_s = score >= SCORE_THRESHOLD and rf_p >= 0.5
+        return 'Likely Employable' if high_s else 'Least Employable'
 
-    # Build user list — run k-NN + RF for graduating-year unemployed users
+    # Build lightweight user list (no ML yet — just plain fields)
     all_users = []
     for r in all_rows:
-        try:
-            employed  = bool(r.get('employed', 0))
-            grad_year = r.get('graduation_year', 0)
-            is_grad   = bool(LATEST_YEAR and grad_year == LATEST_YEAR and not employed)
-            
-            # Safe feature extraction for analytics
-            pred_months  = _knn_months(r) if is_grad else None
-            rf_probability = _rf_prob(r)  if is_grad else None
+        employed  = bool(r.get('employed', 0))
+        grad_year = r.get('graduation_year', 0)
+        name = (r.get('name') or f"{r.get('first_name','')} {r.get('last_name','')}".strip()
+                or f"Alumni {r.get('source_row_id','')}")
+        all_users.append({
+            '_raw':      r,
+            'id':        r['id'],
+            'name':      name,
+            'email':     r.get('email', ''),
+            'course':    r.get('course', 'Unknown'),
+            'year':      grad_year,
+            'status':    r.get('account_status', 'Active'),
+            'employed':  employed,
+            'board_passer':     bool(r.get('board_passer', 0)),
+            'board_exam_score': float(r.get('board_exam_score') or 0.0),
+            'months_to_employment': r.get('months_to_employment'),
+        })
 
-            all_users.append({
-                'id':                  r['id'],
-                'type':                r.get('type', 'Registered'),
-                'name':                r.get('name') or f"{r.get('first_name','')} {r.get('last_name','')}".strip() or f"Alumni {r.get('source_row_id','')}",
-                'email':               r.get('email', ''),
-                'course':              r.get('course', 'Unknown'),
-                'year':                grad_year,
-                'status':              r.get('account_status', 'Active'),
-                'employed':            employed,
-                'board_passer':        bool(r.get('board_passer', 0)),
-                'board_exam_score':    float(r.get('board_exam_score') or 0.0),
-                'months_to_employment': r.get('months_to_employment'),
-                'predicted_months':    pred_months,
-                'rf_probability':      round(rf_probability, 3) if rf_probability is not None else None,
-                'is_graduating':       is_grad,
-                'employability_score': _employability_score(r),
-                'employability_level': _employability_level(r, pred_months, rf_probability),
-            })
-        except Exception as e:
-            print(f"[ERROR] Failed to process user row: {e}")
-            continue
+    # Compute employability stats directly from DB (score formula, no ML needed)
+    # Match _employability_level logic exactly:
+    # employed + months known: use _tier(score>=80, months<=4)
+    # employed + months NULL:  Likely if score>=80 else Employable
+    # unemployed:              Likely if score>=80 else Least
+    _s = "(avg_grade*0.35 + ojt_grade*0.20 + soft_skills*0.15 + hard_skills*0.15 + board_passer*15)"
+    emp_counts = db.execute(f"""
+        SELECT
+            SUM(CASE
+                WHEN employed=1 AND months_to_employment IS NOT NULL AND {_s}>=80 AND months_to_employment<=4 THEN 1
+                WHEN employed=1 AND months_to_employment IS NULL     AND {_s}>=80 THEN 1
+                WHEN employed=0                                      AND {_s}>=80 THEN 1
+                ELSE 0 END) AS likely,
+            SUM(CASE
+                WHEN employed=1 AND months_to_employment IS NOT NULL AND {_s}>=80 AND months_to_employment>4 THEN 1
+                WHEN employed=1 AND months_to_employment IS NOT NULL AND {_s}<80  AND months_to_employment<=4 THEN 1
+                WHEN employed=1 AND months_to_employment IS NULL     AND {_s}<80  THEN 1
+                ELSE 0 END) AS employable,
+            SUM(CASE
+                WHEN employed=1 AND months_to_employment IS NOT NULL AND {_s}<80 AND months_to_employment>4 THEN 1
+                WHEN employed=0                                      AND {_s}<80 THEN 1
+                ELSE 0 END) AS least
+        FROM ml_training_rows WHERE is_active = 1
+    """).fetchone()
 
     stats = {
         'total':      len(all_users),
         'active':     sum(1 for u in all_users if u['status'] == 'Active'),
         'employed':   sum(1 for u in all_users if u['employed']),
         'unemployed': sum(1 for u in all_users if not u['employed']),
+        'likely':     emp_counts['likely'] or 0,
+        'employable': emp_counts['employable'] or 0,
+        'least':      emp_counts['least'] or 0,
     }
 
+    # Sort before pagination
+    sort_by  = request.args.get('sort_by', '')
+    sort_dir = request.args.get('sort_dir', 'asc')
+    reverse  = sort_dir == 'desc'
+    if sort_by == 'course':
+        all_users.sort(key=lambda u: (u['course'] or '').lower(), reverse=reverse)
+    elif sort_by == 'year':
+        all_users.sort(key=lambda u: u['year'] or 0, reverse=reverse)
+    elif sort_by == 'employment':
+        all_users.sort(key=lambda u: 0 if u['employed'] else 1, reverse=reverse)
+    elif sort_by == 'employability':
+        all_users.sort(
+            key=lambda u: _employability_score(u['_raw']),
+            reverse=(sort_dir == 'desc')
+        )
+
+    # Filter
     processed = all_users
     if filter_by == 'Active':
         processed = [u for u in processed if u['status'] == 'Active']
@@ -962,34 +1042,399 @@ def list_users():
         processed = [u for u in processed if u['employed']]
     elif filter_by == 'Unemployed':
         processed = [u for u in processed if not u['employed']]
-
+    if year_filter:
+        try:
+            yf = int(year_filter)
+            processed = [u for u in processed if u['year'] == yf]
+        except ValueError:
+            pass
+    if course_filter:
+        processed = [u for u in processed if (u['course'] or '').upper() == course_filter.upper()]
     if search:
-        processed = [u for u in processed if search in u['name'].lower() or (u['email'] and search in u['email'].lower())]
+        processed = [u for u in processed if
+                     search in u['name'].lower() or (u['email'] and search in u['email'].lower())]
 
     total_filtered = len(processed)
-    
-    # 3. Pagination
+
+    # Paginate FIRST, then run ML only on the visible page
     try:
-        page = max(1, int(request.args.get('page', 1)))
+        page  = max(1, int(request.args.get('page', 1)))
         limit = max(1, int(request.args.get('limit', 100)))
     except (TypeError, ValueError):
-        page = 1
-        limit = 100
-        
+        page, limit = 1, 100
+
     start = (page - 1) * limit
-    end = start + limit
-    paged_users = processed[start:end]
+    paged_raw = processed[start:start + limit]
+
+    # Run ML predictions on all paged rows (batch call — fast)
+    raw_rows   = [u.pop('_raw') for u in paged_raw]
+    batch_inputs = [{
+        'avg_grade':      float(r.get('avg_grade') or 0),
+        'avg_prof_grade': float(r.get('avg_prof_grade') or 0),
+        'avg_elec_grade': float(r.get('avg_elec_grade') or 0),
+        'ojt_grade':      float(r.get('ojt_grade') or 0),
+        'soft_skills':    float(r.get('soft_skills') or 0),
+        'hard_skills':    float(r.get('hard_skills') or 0),
+        'age':            int(r.get('age') or 22),
+        'graduation_year': int(r.get('graduation_year') or 0),
+        'course':         r.get('course') or '',
+    } for r in raw_rows]
+    batch_preds = ml_predictor.predict_batch(batch_inputs, model='rf')
+
+    paged_users = []
+    for u, r, pred in zip(paged_raw, raw_rows, batch_preds):
+        try:
+            # All latest-year students are "graduating" regardless of employment
+            is_grad = bool(LATEST_YEAR and u['year'] == LATEST_YEAR)
+            rf_probability = pred.get('probability_employed')
+            pred_months    = _knn_months(r) if is_grad and not u['employed'] else None
+            score = _employability_score(r)
+            level = _employability_level(r, pred_months, rf_probability)
+        except Exception:
+            is_grad = pred_months = rf_probability = None
+            score = 0
+            level = 'Pending Assessment'
+        u.update({
+            'predicted_months':    pred_months,
+            'rf_probability':      round(rf_probability, 3) if rf_probability is not None else None,
+            'is_graduating':       is_grad,
+            'employability_score': score,
+            'employability_level': level,
+        })
+        paged_users.append(u)
 
     return jsonify({
-        'users': paged_users, 
-        'stats': stats, 
+        'users': paged_users,
+        'stats': stats,
         'latest_year': LATEST_YEAR,
+        'available_years': available_years,
+        'available_courses': available_courses,
         'pagination': {
             'page': page,
             'limit': limit,
             'total': total_filtered,
             'pages': (total_filtered + limit - 1) // limit
         }
+    }), 200
+
+
+@admin_bp.route('/predict', methods=['GET'])
+@admin_required
+def predict_graduating():
+    """Predict employability tiers for a selected year's students."""
+    db = get_db()
+    search      = request.args.get('search', '').lower()
+    filter_tier = request.args.get('tier', 'All')
+
+    # All available years
+    year_rows = db.execute(
+        "SELECT DISTINCT graduation_year FROM ml_training_rows WHERE is_active=1 ORDER BY graduation_year DESC"
+    ).fetchall()
+    available_years = [r['graduation_year'] for r in year_rows]
+
+    if not available_years:
+        return jsonify({'error': 'No dataset uploaded. Please upload a dataset first.'}), 404
+
+    # Default to most recent year; allow override via ?year=
+    latest = available_years[0]
+    try:
+        LATEST_YEAR = int(request.args.get('year', latest))
+    except (TypeError, ValueError):
+        LATEST_YEAR = latest
+
+    if LATEST_YEAR not in available_years:
+        LATEST_YEAR = latest
+
+    SCORE_THRESHOLD = 80
+    FAST_MONTHS = 4
+
+    hist_rows = db.execute("""
+        SELECT course, avg_grade, soft_skills, hard_skills,
+               ojt_grade, avg_prof_grade, avg_elec_grade, months_to_employment
+        FROM ml_training_rows
+        WHERE is_active=1 AND employed=1 AND months_to_employment IS NOT NULL
+    """).fetchall()
+
+    # Previous-year alumni as reference pool for cross-year k-NN
+    # Strictly previous years only (< not !=) — fallback to same-year if no history
+    prev_rows = db.execute("""
+        SELECT course, avg_grade, soft_skills, hard_skills,
+               ojt_grade, avg_prof_grade, avg_elec_grade, employed
+        FROM ml_training_rows
+        WHERE is_active=1 AND graduation_year < ?
+    """, [LATEST_YEAR]).fetchall()
+
+    has_history = len(prev_rows) > 0
+
+    if not has_history:
+        prev_rows = db.execute("""
+            SELECT course, avg_grade, soft_skills, hard_skills,
+                   ojt_grade, avg_prof_grade, avg_elec_grade, employed
+            FROM ml_training_rows WHERE is_active=1
+        """).fetchall()
+
+    _prev_by_course = {}
+    for h in prev_rows:
+        c = (h['course'] or '').upper().strip()
+        _prev_by_course.setdefault(c, []).append(h)
+
+    def _norm_gwa(g):
+        g = float(g or 0)
+        return round((5.0 - g) / 4.0 * 100, 1) if 0 < g <= 5.0 else g
+
+    FEAT_COLS = ['avg_grade', 'soft_skills', 'hard_skills', 'ojt_grade', 'avg_prof_grade', 'avg_elec_grade']
+
+    def _feats(r):
+        return [_norm_gwa(r.get('avg_grade', 0)),
+                float(r.get('soft_skills') or 0), float(r.get('hard_skills') or 0),
+                float(r.get('ojt_grade') or 0), float(r.get('avg_prof_grade') or 0),
+                float(r.get('avg_elec_grade') or 0)]
+
+    def _knn_emp_rate(r, k=10):
+        """Employment rate among k nearest previous-year alumni (same course preferred)."""
+        course = (r.get('course') or '').upper().strip()
+        pool = _prev_by_course.get(course) or list(prev_rows)
+        if not pool:
+            return None
+        if len(pool) < k:
+            pool = list(prev_rows)
+        uf = _feats(r)
+        neighbors = sorted(
+            ((sum((a - float(h[col] or 0))**2 for a, col in zip(uf, FEAT_COLS))**0.5, int(h['employed']))
+             for h in pool),
+            key=lambda x: x[0]
+        )[:k]
+        if not neighbors:
+            return None
+        return sum(emp for _, emp in neighbors) / len(neighbors)
+
+    def _score(r):
+        avg_g = _norm_gwa(r.get('avg_grade', 0))
+        return round(min(
+            avg_g * 0.35 + float(r.get('ojt_grade') or 0) * 0.20 +
+            float(r.get('soft_skills') or 0) * 0.15 + float(r.get('hard_skills') or 0) * 0.15 +
+            float(r.get('board_passer') or 0) * 15, 100
+        ), 1)
+
+    def _estimate_months(rf_prob, knn_emp_rate):
+        """Estimate months-to-employment from RF probability and k-NN employment rate."""
+        combined = ((rf_prob or 0.5) * 0.6 + (knn_emp_rate or 0.5) * 0.4)
+        if combined >= 0.80: return round(1 + (1 - combined) * 5)   # 1-2 months
+        if combined >= 0.65: return round(2 + (1 - combined) * 10)  # 2-4 months
+        if combined >= 0.50: return round(4 + (1 - combined) * 12)  # 4-7 months
+        return round(7 + (0.5 - combined) * 16)                     # 7-15 months
+
+    def _tier(score, rf_prob, knn_emp_rate):
+        """
+        Likely Employable  : score >= 80 AND (RF >= 0.65 OR kNN emp rate >= 0.75)
+        Employable         : score >= 65 OR RF >= 0.55 OR kNN emp rate >= 0.55
+        Least Employable   : everything else
+        """
+        knn = knn_emp_rate if knn_emp_rate is not None else 0.5
+        rf  = rf_prob      if rf_prob      is not None else 0.5
+        if score >= 80 and (rf >= 0.65 or knn >= 0.75):
+            return 'Likely Employable'
+        if score >= 65 or rf >= 0.55 or knn >= 0.55:
+            return 'Employable'
+        return 'Least Employable'
+
+    reg_rows = db.execute(
+        "SELECT * FROM users WHERE role='alumni' AND graduation_year=? AND (employed=0 OR employed IS NULL)",
+        [LATEST_YEAR]
+    ).fetchall()
+    reg_emails = {r['email'].lower() for r in reg_rows if r['email']}
+
+    ds_rows = db.execute(
+        "SELECT * FROM ml_training_rows WHERE is_active=1 AND graduation_year=? AND employed=0",
+        [LATEST_YEAR]
+    ).fetchall()
+
+    all_students = []
+    for r in reg_rows:
+        d = dict(r)
+        d['_source'] = 'registered'
+        d['name'] = f"{d.get('first_name','')} {d.get('last_name','')}".strip()
+        all_students.append(d)
+
+    for r in ds_rows:
+        email = (r['email'] or '').lower()
+        if email and email in reg_emails:
+            continue
+        all_students.append({
+            'id': f"ds_{r['id']}", '_source': 'dataset',
+            'name': r['name'] or f"Student {r['source_row_id']}",
+            'email': r['email'] or '', 'course': r['course'],
+            'graduation_year': r['graduation_year'], 'employed': 0,
+            'avg_grade': r['avg_grade'], 'avg_prof_grade': r['avg_prof_grade'],
+            'avg_elec_grade': r['avg_elec_grade'], 'ojt_grade': r['ojt_grade'],
+            'soft_skills': r['soft_skills'], 'hard_skills': r['hard_skills'],
+            'board_passer': r['board_passer'], 'age': r['age'],
+        })
+
+    # Batch all RF predictions in one vectorized call
+    batch_inputs = [{
+        'avg_grade':      float(r.get('avg_grade') or 0),
+        'avg_prof_grade': float(r.get('avg_prof_grade') or 0),
+        'avg_elec_grade': float(r.get('avg_elec_grade') or 0),
+        'ojt_grade':      float(r.get('ojt_grade') or 0),
+        'soft_skills':    float(r.get('soft_skills') or 0),
+        'hard_skills':    float(r.get('hard_skills') or 0),
+        'age':            int(r.get('age') or 22),
+        'graduation_year': int(r.get('graduation_year') or LATEST_YEAR),
+        'course':         r.get('course') or '',
+    } for r in all_students]
+
+    batch_preds = ml_predictor.predict_batch(batch_inputs, model='rf')
+
+    all_results = []
+    for r, pred in zip(all_students, batch_preds):
+        try:
+            rf_prob      = float(pred.get('probability_employed') or 0.5)
+            knn_emp_rate = _knn_emp_rate(r)
+            score        = _score(r)
+            tier         = _tier(score, rf_prob, knn_emp_rate)
+            est_months   = _estimate_months(rf_prob, knn_emp_rate)
+            all_results.append({
+                'id': r['id'], 'name': r.get('name') or 'Unknown',
+                'email': r.get('email', ''), 'course': r.get('course', ''),
+                'graduation_year': LATEST_YEAR, 'score': score,
+                'rf_probability': round(rf_prob * 100, 1),
+                'knn_emp_rate': round((knn_emp_rate or 0) * 100, 1),
+                'predicted_months': est_months,
+                'tier': tier,
+                'board_passer': bool(r.get('board_passer', 0)),
+                'source': r.get('_source', 'registered'),
+            })
+        except Exception as e:
+            print(f"[predict] Error: {e}")
+            continue
+
+    all_results.sort(key=lambda x: x['score'], reverse=True)
+
+    summary = {
+        'high':       sum(1 for r in all_results if r['tier'] == 'Likely Employable'),
+        'employable': sum(1 for r in all_results if r['tier'] == 'Employable'),
+        'least':      sum(1 for r in all_results if r['tier'] == 'Least Employable'),
+        'total':      len(all_results),
+    }
+
+    filtered = all_results
+    if filter_tier != 'All':
+        filtered = [r for r in filtered if r['tier'] == filter_tier]
+    if search:
+        filtered = [r for r in filtered if search in r['name'].lower() or search in r['course'].lower()]
+
+    return jsonify({
+        'students': filtered,
+        'summary': summary,
+        'graduation_year': LATEST_YEAR,
+        'available_years': available_years,
+    }), 200
+
+
+@admin_bp.route('/predict/insights/<path:student_id>', methods=['GET'])
+@admin_required
+def predict_insights(student_id):
+    """Return score breakdown + k-NN historical matches for a student."""
+    db = get_db()
+
+    # Fetch the student row
+    if str(student_id).startswith('ds_'):
+        rid = str(student_id).replace('ds_', '')
+        row = db.execute('SELECT * FROM ml_training_rows WHERE id = ?', [rid]).fetchone()
+        if not row:
+            return jsonify({'error': 'Student not found'}), 404
+        r = dict(row)
+    else:
+        row = db.execute('SELECT * FROM users WHERE id = ?', [student_id]).fetchone()
+        if not row:
+            return jsonify({'error': 'Student not found'}), 404
+        r = dict(row)
+
+    def _norm_gwa(g):
+        g = float(g or 0)
+        return round((5.0 - g) / 4.0 * 100, 1) if 0 < g <= 5.0 else g
+
+    avg_g  = _norm_gwa(r.get('avg_grade', 0))
+    ojt    = float(r.get('ojt_grade') or 0)
+    soft   = float(r.get('soft_skills') or 0)
+    hard   = float(r.get('hard_skills') or 0)
+    board  = float(r.get('board_passer') or 0)
+    prof   = float(r.get('avg_prof_grade') or 0)
+    elec   = float(r.get('avg_elec_grade') or 0)
+    score  = round(min(avg_g*0.35 + ojt*0.20 + soft*0.15 + hard*0.15 + board*15, 100), 1)
+
+    score_breakdown = [
+        {'label': 'Academic Grade',    'value': round(avg_g, 1),  'weighted': round(avg_g*0.35, 1),  'weight': '35%'},
+        {'label': 'OJT / Internship',  'value': round(ojt, 1),   'weighted': round(ojt*0.20, 1),   'weight': '20%'},
+        {'label': 'Soft Skills',       'value': round(soft, 1),  'weighted': round(soft*0.15, 1),  'weight': '15%'},
+        {'label': 'Hard Skills',       'value': round(hard, 1),  'weighted': round(hard*0.15, 1),  'weight': '15%'},
+        {'label': 'Board/Licensure',   'value': int(board),      'weighted': round(board*15, 1),   'weight': 'bonus'},
+    ]
+
+    # Get latest year for reference
+    latest_yr = db.execute(
+        'SELECT MAX(graduation_year) FROM ml_training_rows WHERE is_active=1'
+    ).fetchone()[0]
+
+    # Use strictly PREVIOUS years (< student's year), fall back to same-year if no history
+    student_year = r.get('graduation_year') or latest_yr
+    prev_rows = db.execute("""
+        SELECT name, course, graduation_year, avg_grade, soft_skills, hard_skills,
+               ojt_grade, avg_prof_grade, avg_elec_grade, employed, months_to_employment
+        FROM ml_training_rows
+        WHERE is_active=1 AND graduation_year < ?
+    """, [student_year]).fetchall()
+
+    using_fallback = len(prev_rows) == 0
+    if using_fallback:
+        prev_rows = db.execute("""
+            SELECT name, course, graduation_year, avg_grade, soft_skills, hard_skills,
+                   ojt_grade, avg_prof_grade, avg_elec_grade, employed, months_to_employment
+            FROM ml_training_rows WHERE is_active=1 AND graduation_year = ?
+        """, [student_year]).fetchall()
+
+    FEAT_COLS = ['avg_grade', 'soft_skills', 'hard_skills', 'ojt_grade', 'avg_prof_grade', 'avg_elec_grade']
+    uf = [avg_g, soft, hard, ojt, prof, elec]
+    course = (r.get('course') or '').upper().strip()
+
+    neighbors = []
+    for h in prev_rows:
+        dist = sum((a - float(h[col] or 0))**2 for a, col in zip(uf, FEAT_COLS)) ** 0.5
+        neighbors.append((dist, h))
+    neighbors.sort(key=lambda x: x[0])
+
+    # Top 10 — prefer same course
+    same = [(d, h) for d, h in neighbors if (h['course'] or '').upper().strip() == course][:6]
+    other = [(d, h) for d, h in neighbors if (h['course'] or '').upper().strip() != course][:4]
+    top10 = (same + other)[:10]
+
+    matches = [{
+        'name':        h['name'] or f"Alumni {i+1}",
+        'course':      h['course'],
+        'year':        h['graduation_year'],
+        'avg_grade':   round(float(h['avg_grade'] or 0), 1),
+        'soft_skills': round(float(h['soft_skills'] or 0), 1),
+        'hard_skills': round(float(h['hard_skills'] or 0), 1),
+        'ojt_grade':   round(float(h['ojt_grade'] or 0), 1),
+        'employed':    bool(h['employed']),
+        'months':      h['months_to_employment'],
+        'similarity':  round(100 - min(d * 2, 99), 1),
+    } for i, (d, h) in enumerate(top10)]
+
+    emp_rate = round(sum(1 for m in matches if m['employed']) / len(matches) * 100, 1) if matches else 0
+
+    return jsonify({
+        'student': {
+            'name':   r.get('name') or f"{r.get('first_name','')} {r.get('last_name','')}".strip(),
+            'course': r.get('course', ''),
+            'year':   r.get('graduation_year'),
+            'score':  score,
+        },
+        'score_breakdown':    score_breakdown,
+        'knn_matches':        matches,
+        'knn_emp_rate':       emp_rate,
+        'using_same_year':    using_fallback,
     }), 200
 
 
@@ -1036,6 +1481,67 @@ def fill_pending_skills():
 
     db.commit()
     return jsonify({'filled': filled, 'pending_total': len(pending)}), 200
+
+
+@admin_bp.route('/users/ds_<int:ds_id>', methods=['GET', 'PUT'])
+@admin_required
+def manage_dataset_user(ds_id):
+    db = get_db()
+    if request.method == 'GET':
+        r = db.execute('SELECT * FROM ml_training_rows WHERE id = ?', [ds_id]).fetchone()
+        if not r:
+            return jsonify({'error': 'User not found'}), 404
+        return jsonify({'user': {
+            'id':               f'ds_{r["id"]}',
+            'firstName':        (r['name'] or '').split(',')[1].strip().split()[0] if ',' in (r['name'] or '') else (r['name'] or '').split()[0] if r['name'] else '',
+            'middleName':       '',
+            'lastName':         (r['name'] or '').split(',')[0].strip() if ',' in (r['name'] or '') else '',
+            'email':            r['email'] or '',
+            'course':           r['course'] or '',
+            'graduationYear':   r['graduation_year'],
+            'age':              r['age'],
+            'employed':         bool(r['employed']),
+            'monthsToEmployment': r['months_to_employment'],
+            'avgGrade':         r['avg_grade'],
+            'avgProfGrade':     r['avg_prof_grade'],
+            'avgElecGrade':     r['avg_elec_grade'],
+            'ojtGrade':         r['ojt_grade'],
+            'softSkills':       r['soft_skills'],
+            'hardSkills':       r['hard_skills'],
+            'boardPasser':      bool(r['board_passer']),
+            'boardExamScore':   r['board_exam_score'],
+            'status':           'Active',
+        }}), 200
+
+    data = request.get_json()
+    allowed_ds = {
+        'employed':           ('employed',               lambda v: int(bool(v))),
+        'monthsToEmployment': ('months_to_employment',   lambda v: int(v) if v not in (None, '') else None),
+        'avgGrade':           ('avg_grade',              float),
+        'avgProfGrade':       ('avg_prof_grade',         float),
+        'avgElecGrade':       ('avg_elec_grade',         float),
+        'ojtGrade':           ('ojt_grade',              float),
+        'softSkills':         ('soft_skills',            float),
+        'hardSkills':         ('hard_skills',            float),
+        'boardPasser':        ('board_passer',           lambda v: int(bool(v))),
+        'boardExamScore':     ('board_exam_score',       float),
+        'course':             ('course',                 str),
+        'graduationYear':     ('graduation_year',        int),
+    }
+    sets, vals = [], []
+    for key, (col, cast) in allowed_ds.items():
+        if key in data:
+            try:
+                val = cast(data[key]) if data[key] not in (None, '') else None
+            except (ValueError, TypeError):
+                val = None
+            sets.append(f'{col} = ?')
+            vals.append(val)
+    if sets:
+        vals.append(ds_id)
+        db.execute(f"UPDATE ml_training_rows SET {', '.join(sets)} WHERE id = ?", vals)
+        db.commit()
+    return jsonify({'message': 'Updated'}), 200
 
 
 @admin_bp.route('/users/<int:user_id>', methods=['GET', 'PUT'])
@@ -1829,6 +2335,60 @@ def predict_dataset():
 
 # ── Factors Configuration ──────────────────────────────────────────────────
 
+BOARD_EXAM_PROGRAMS = {'BSN', 'BSECE', 'BSED', 'PSYCHOLOGY', 'BSA'}
+
+
+@admin_bp.route('/factors-config', methods=['GET'])
+@admin_required
+def get_factors_config():
+    """Return voter_config factors with program-aware board/licensure filtering."""
+    db = get_db()
+    program = (request.args.get('program') or '').strip().upper()
+    rows = db.execute("SELECT * FROM voter_config ORDER BY id").fetchall()
+    is_board_program = not program or program in BOARD_EXAM_PROGRAMS
+
+    factors = []
+    for r in rows:
+        if r['field_key'] == 'gender':
+            continue  # never show gender
+        if r['field_key'] == 'board_passer' and not is_board_program:
+            continue  # hide board factor for non-board programs
+        factors.append({
+            'key':     r['field_key'],
+            'name':    r['field_name'],
+            'enabled': bool(r['enabled']),
+            'weight':  r['weight'],
+            'is_board_factor': r['field_key'] == 'board_passer',
+        })
+
+    total_weight = sum(f['weight'] for f in factors if f['enabled']) or 1
+    for f in factors:
+        f['pct'] = round(f['weight'] / total_weight * 100, 1) if f['enabled'] else 0
+
+    return jsonify({
+        'factors': factors,
+        'program': program or None,
+        'is_board_program': is_board_program,
+        'board_programs': sorted(BOARD_EXAM_PROGRAMS),
+    }), 200
+
+
+@admin_bp.route('/factors-config', methods=['PUT'])
+@admin_required
+def update_factors_config():
+    data = request.get_json() or {}
+    fields = data.get('factors', [])
+    db = get_db()
+    for f in fields:
+        weight = max(0, min(100, int(f.get('weight', 0) or 0)))
+        db.execute(
+            "UPDATE voter_config SET enabled=?, weight=? WHERE field_key=?",
+            [int(bool(f.get('enabled', True))), weight, f['key']]
+        )
+    db.commit()
+    return jsonify({'message': 'Saved'}), 200
+
+
 @admin_bp.route('/factors-configuration', methods=['GET'])
 @admin_required
 def factors_configuration():
@@ -1970,9 +2530,11 @@ def upload_model():
 
     safe_name = file.filename.replace(' ', '_')
     file_path = os.path.join(upload_folder, safe_name)
+    _set_progress('uploading', 2, 'Saving file…')
     file.save(file_path)
     file_size = os.path.getsize(file_path)
     file_hash = _file_sha256(file_path)
+    _set_progress('uploading', 4, 'File saved')
     is_csv = safe_name.lower().endswith('.csv')
 
     is_tabular = is_csv or safe_name.lower().endswith('.xlsx') or safe_name.lower().endswith('.xls')
@@ -2041,13 +2603,20 @@ def upload_model():
 
     if apply_to_training and is_tabular:
         db_path = current_app.config.get('DATABASE', os.getenv('DATABASE', 'plp_alumni.db'))
+        _set_progress('importing', 5, 'Starting import…')
         try:
+            def _import_progress(done, total):
+                pct = 5 + int((done / total) * 55)  # 5% → 60%
+                _set_progress('importing', pct, f'Importing rows… {done}/{total}', total, done)
+
             import_result = import_training_csv(
                 database_path=db_path,
                 csv_path=file_path,
                 source_name=safe_name,
                 year_override=dataset_year,
+                progress_callback=_import_progress,
             )
+            _set_progress('importing', 60, 'Import complete')
             db.execute(
                 "UPDATE model_uploads SET applied_to_training = 1, status = 'Imported' WHERE id = ?",
                 [cur.lastrowid],
@@ -2063,18 +2632,25 @@ def upload_model():
             return jsonify({'error': str(exc)}), 400
 
         if retrain_after_import:
-            rf_metadata = train_random_forest(database_path=db_path)
-            lr_metadata = train_linear_employability(database_path=db_path)
-            ml_predictor._load_models()
-            trained_models = {'rf': rf_metadata, 'lr': lr_metadata}
-            training_policy = 'uploaded_csv_imported_and_retrained'
-
-        # ── Auto-forecast 3 years ahead ───────────────────────────────────────
-        if dataset_year:
-            try:
-                forecast = _auto_forecast_3yr(db, dataset_year)
-            except Exception:
-                forecast = None
+            _set_progress('training', 62, 'Retraining models…')
+            global _training_job
+            with _training_lock:
+                _training_job = {'status': 'running', 'result': None, 'error': None}
+            app = current_app._get_current_object()
+            t = threading.Thread(
+                target=_run_training_background,
+                args=(app, db_path, dataset_year),
+                daemon=True,
+            )
+            t.start()
+            training_policy = 'uploaded_csv_imported_and_retraining_async'
+        else:
+            # ── Auto-forecast 3 years ahead (no retrain requested) ────────────
+            if dataset_year:
+                try:
+                    forecast = _auto_forecast_3yr(db, dataset_year)
+                except Exception:
+                    forecast = None
 
     upload_row = db.execute(
         "SELECT * FROM model_uploads WHERE id = ?", [cur.lastrowid]
@@ -2096,6 +2672,7 @@ def upload_model():
         'message': 'File uploaded successfully',
         'training_policy': training_policy,
         'upload': upload,
+        'training_async': training_policy == 'uploaded_csv_imported_and_retraining_async',
     }
     if import_result:
         response['import'] = import_result
@@ -2129,6 +2706,20 @@ def list_uploads():
     } for r in rows]
 
     return jsonify({'uploads': uploads}), 200
+
+
+@admin_bp.route('/training/status', methods=['GET'])
+@admin_required
+def training_status():
+    with _training_lock:
+        return jsonify(dict(_training_job)), 200
+
+
+@admin_bp.route('/upload/progress', methods=['GET'])
+@admin_required
+def upload_progress():
+    with _upload_progress_lock:
+        return jsonify(dict(_upload_progress)), 200
 
 
 # ── All-Models Forecasting ─────────────────────────────────────────────────
@@ -2432,16 +3023,20 @@ def training_data_years():
 def delete_training_data_by_year(year):
     db = get_db()
     cur = db.execute("DELETE FROM ml_training_rows WHERE graduation_year = ?", [year])
-    # Remove the matching employment_data entry so the forecast graph
-    # immediately reflects the deletion on next page load.
     db.execute("DELETE FROM employment_data WHERE year = ?", [year])
     db.execute("DELETE FROM program_rates WHERE year = ?", [year])
+    # Also delete alumni accounts tied to this graduation year
+    alumni_cur = db.execute(
+        "DELETE FROM users WHERE role = 'alumni' AND graduation_year = ?", [year]
+    )
     db.commit()
     return jsonify({
-        'message': f'Deleted {cur.rowcount} training rows for {year}. Forecast updated.',
+        'message': f'Deleted {cur.rowcount} training rows and {alumni_cur.rowcount} alumni accounts for {year}.',
         'deleted': cur.rowcount,
+        'alumni_deleted': alumni_cur.rowcount,
         'forecast_updated': True,
     }), 200
+
 
 
 # ── Bulk Alumni Import ──────────────────────────────────────────────────────
@@ -2457,6 +3052,15 @@ def bulk_import_users():
     if not file or not file.filename:
         return jsonify({'error': 'No file provided'}), 400
 
+    dataset_year_raw = request.form.get('dataset_year', '').strip()
+    year_fallback = None
+    try:
+        year_fallback = int(dataset_year_raw) if dataset_year_raw else None
+    except ValueError:
+        pass
+
+    skip_email = _is_truthy(request.form.get('skip_email'), default=False)
+
     filename = file.filename.lower()
     try:
         if filename.endswith('.csv'):
@@ -2464,11 +3068,10 @@ def bulk_import_users():
         elif filename.endswith(('.xlsx', '.xls')):
             df = pd.read_excel(io.BytesIO(file.read()))
         else:
-            return jsonify({'error': 'Only CSV and Excel (.xlsx/.xls) files are supported'}), 400
+            return jsonify({'error': 'Only CSV and Excel files are supported'}), 400
     except Exception as e:
         return jsonify({'error': f'Could not parse file: {e}'}), 400
 
-    # Normalize column names
     df.columns = [str(c).strip().lower().replace(' ', '_') for c in df.columns]
 
     def _find_col(candidates):
@@ -2477,47 +3080,54 @@ def bulk_import_users():
                 return c
         return None
 
-    email_col = _find_col(['email', 'email_address', 'e-mail'])
+    email_col     = _find_col(['email', 'email_address', 'e-mail'])
     if not email_col:
         return jsonify({'error': "No 'email' column found in the file"}), 400
 
-    name_col    = _find_col(['name', 'full_name', 'fullname', 'student_name'])
-    first_col   = _find_col(['first_name', 'firstname', 'given_name', 'first'])
-    middle_col  = _find_col(['middle_name', 'middlename', 'middle'])
-    last_col    = _find_col(['last_name', 'lastname', 'surname', 'family_name', 'last'])
-    course_col  = _find_col(['program', 'course', 'degree', 'program_name', 'course_name', 'degree_program'])
-    year_col    = _find_col([
-        'graduation_year', 'jr_grad', 'grad_year', 'year_graduated', 'year_graduation',
-        'graduated_year', 'year'
-    ])
-    age_col     = _find_col(['age'])
-    grade_col   = _find_col(['cgpa', 'avg_grade', 'gpa', 'general_average'])
-    prof_col    = _find_col(['prof_grade', 'avg_prof_grade', 'professional_grade'])
-    elec_col    = _find_col(['elec_grade', 'avg_elec_grade', 'elective_grade'])
-    board_col   = _find_col(['board_passer', 'board_exam_passer', 'board'])
-    soft_col    = _find_col(['soft_skills', 'soft_skills_avg', 'soft_skill', 'softskills'])
-    hard_col    = _find_col(['hard_skills', 'hard_skills_avg', 'hard_skill', 'hardskills'])
-    ojt_col     = _find_col(['ojt_grade', 'ojt', 'internship_grade'])
-    board_score_col = _find_col(['board_exam_score', 'board_score', 'board_exam'])
-    months_col  = _find_col(['months_to_employment', 'employment_delay_months', 'months_employed', 'months_to_job'])
-    employed_col = _find_col(['employed', 'employment_status', 'employment', 'is_employed', 'status'])
+    name_col      = _find_col(['name', 'full_name', 'fullname', 'student_name'])
+    course_col    = _find_col(['program', 'course', 'degree'])
+    year_col      = _find_col(['graduation_year', 'jr_grad', 'grad_year', 'year_graduated', 'year'])
+    alumni_id_col = _find_col(['alumni_id', 'student_id', 'id_number'])
+    employed_col  = _find_col(['employed', 'employment_status', 'employment', 'is_employed', 'status'])
+    grade_col     = _find_col(['cgpa', 'avg_grade', 'gpa', 'general_average'])
+    soft_col      = _find_col(['soft_skills', 'soft_skills_avg', 'soft_skill', 'softskills'])
+    hard_col      = _find_col(['hard_skills', 'hard_skills_avg', 'hard_skill', 'hardskills'])
 
     db = get_db()
+    existing_map = {
+        r['email'].lower(): {'id': r['id'], 'role': r['role']}
+        for r in db.execute("SELECT id, role, email FROM users").fetchall()
+        if r['email']
+    }
+
     created, updated, skipped, failed = [], [], [], []
 
     for _, row in df.iterrows():
         email = str(row.get(email_col, '') or '').strip().lower()
         if not email or '@' not in email:
-            skipped.append({'email': email or '(blank)', 'reason': 'Invalid or missing email'})
+            skipped.append({'email': email or '(blank)', 'reason': 'Invalid email'})
             continue
 
-        existing = db.execute(
-            "SELECT id, role FROM users WHERE LOWER(email) = ?",
-            [email],
-        ).fetchone()
+        def _safe(col, cast, default):
+            try:
+                v = row.get(col) if col else None
+                if v is None or str(v).strip() in ('', 'nan', 'NaN', 'NaT'):
+                    return default
+                return int(float(v)) if cast is int else cast(v)
+            except Exception:
+                return default
 
-        # Parse name — handles "LAST, FIRST MIDDLE" and "FIRST MIDDLE LAST" formats
-        first_name, middle_name, last_name = 'Alumni', '', ''
+        graduation_year = _safe(year_col, int, year_fallback)
+        if not graduation_year and alumni_id_col:
+            aid = str(row.get(alumni_id_col, '') or '').strip()
+            m = re.search(r'\b(20\d{2})\b', aid)
+            if m:
+                graduation_year = int(m.group(1))
+        if not graduation_year:
+            skipped.append({'email': email, 'reason': 'No graduation year'})
+            continue
+
+        first_name, last_name = 'Alumni', ''
         if name_col and row.get(name_col):
             raw = str(row[name_col]).strip()
             if ',' in raw:
@@ -2525,115 +3135,55 @@ def bulk_import_users():
                 last_name = parts[0].strip().title()
                 fn_parts = parts[1].strip().split()
                 first_name = fn_parts[0].title() if fn_parts else 'Alumni'
-                middle_name = ' '.join(fn_parts[1:]).title() if len(fn_parts) > 1 else ''
             else:
                 parts = raw.split()
                 first_name = parts[0].title() if parts else 'Alumni'
                 last_name = parts[-1].title() if len(parts) > 1 else ''
-                middle_name = ' '.join(parts[1:-1]).title() if len(parts) > 2 else ''
 
-        if first_col:
-            first_raw = str(row.get(first_col, '') or '').strip()
-            if first_raw:
-                first_name = first_raw.title()
-        if middle_col:
-            middle_raw = str(row.get(middle_col, '') or '').strip()
-            if middle_raw:
-                middle_name = middle_raw.title()
-        if last_col:
-            last_raw = str(row.get(last_col, '') or '').strip()
-            if last_raw:
-                last_name = last_raw.title()
+        course      = _normalize_course_value(row.get(course_col)) if course_col else ''
+        employed    = (_parse_employment_flag(row.get(employed_col)) if employed_col else None) or 0
+        avg_grade   = _safe(grade_col, float, 0.0)
+        soft_skills = _safe(soft_col, float, 0.0)
+        hard_skills = _safe(hard_col, float, 0.0)
 
-        # Optional academic fields
-        def _safe(col, cast, default):
-            try:
-                v = row.get(col) if col else None
-                if v is None or str(v).strip() in ('', 'nan', 'NaN', 'NaT'):
-                    return default
-                if cast is int:
-                    return int(float(v))
-                return cast(v)
-            except Exception:
-                return default
-
-        course          = _normalize_course_value(row.get(course_col)) if course_col else ''
-        graduation_year = _safe(year_col, int, 2023)
-        age             = _safe(age_col, int, 22)
-        avg_grade       = _safe(grade_col, float, 0.0)
-        avg_prof_grade  = _safe(prof_col, float, 0.0)
-        avg_elec_grade  = _safe(elec_col, float, 0.0)
-        ojt_grade       = _safe(ojt_col, float, 0.0)
-        soft_skills     = _safe(soft_col, float, 0.0)
-        hard_skills     = _safe(hard_col, float, 0.0)
-        board_passer    = 1 if board_col and str(row.get(board_col, '') or '').strip().lower() in ('1', 'true', 'yes', 'y') else 0
-        board_exam_score = _safe(board_score_col, float, 0.0)
-        months_to_employment = _safe(months_col, int, None)
-        employed_val = _parse_employment_flag(row.get(employed_col)) if employed_col else None
-        employed = employed_val if employed_val is not None else 0
-
-        # Generate random 10-char password
         password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-        pw_hash  = _bcrypt.hashpw(password.encode(), _bcrypt.gensalt()).decode()
+        pw_hash  = _bcrypt.hashpw(password.encode(), _bcrypt.gensalt(rounds=4)).decode()
 
         try:
+            existing = existing_map.get(email)
             if existing:
                 if existing['role'] != 'alumni':
-                    skipped.append({'email': email, 'reason': 'Account exists with non-alumni role'})
+                    skipped.append({'email': email, 'reason': 'Non-alumni account exists'})
                     continue
                 db.execute("""
-                    UPDATE users SET
-                      first_name = ?, middle_name = ?, last_name = ?,
-                      course = ?, graduation_year = ?, age = ?, avg_grade = ?,
-                      avg_prof_grade = ?, avg_elec_grade = ?, ojt_grade = ?,
-                      soft_skills = ?, hard_skills = ?, board_passer = ?,
-                      board_exam_score = ?, months_to_employment = ?, employed = ?
-                    WHERE id = ?
-                """, [first_name, middle_name, last_name,
-                      course, graduation_year, age, avg_grade,
-                      avg_prof_grade, avg_elec_grade, ojt_grade,
-                      soft_skills, hard_skills, board_passer,
-                      board_exam_score, months_to_employment, employed,
-                      existing['id']])
-                db.commit()
-                updated.append({
-                    'email': email,
-                    'name': f"{first_name} {last_name}".strip(),
-                })
+                    UPDATE users SET first_name=?, last_name=?, course=?,
+                      graduation_year=?, avg_grade=?, soft_skills=?, hard_skills=?, employed=?
+                    WHERE id=?
+                """, [first_name, last_name, course, graduation_year,
+                      avg_grade, soft_skills, hard_skills, employed, existing['id']])
+                updated.append({'email': email, 'name': f"{first_name} {last_name}".strip()})
                 continue
 
             db.execute("""
                 INSERT INTO users
-                  (first_name, middle_name, last_name, email, password_hash, role,
-                   course, graduation_year, age, avg_grade, avg_prof_grade,
-                   avg_elec_grade, ojt_grade, soft_skills, hard_skills,
-                   board_passer, board_exam_score, months_to_employment, employed,
-                   account_status)
-                VALUES (?,?,?,?,?,'alumni',?,?,?,?,?,?,?,?,?,?,?,?,?,'Active')
-            """, [first_name, middle_name, last_name, email, pw_hash,
-                  course, graduation_year, age, avg_grade,
-                  avg_prof_grade, avg_elec_grade, ojt_grade, soft_skills,
-                  hard_skills, board_passer, board_exam_score, months_to_employment,
-                  employed])
-            db.commit()
+                  (first_name, last_name, email, password_hash, role,
+                   course, graduation_year, avg_grade, soft_skills, hard_skills,
+                   employed, account_status)
+                VALUES (?,?,?,?,'alumni',?,?,?,?,?,?,'Active')
+            """, [first_name, last_name, email, pw_hash,
+                  course, graduation_year, avg_grade, soft_skills, hard_skills, employed])
 
-            email_sent, email_err = _send_welcome_email(email, f"{first_name} {last_name}".strip(), password)
-            created.append({
-                'email': email,
-                'name': f"{first_name} {last_name}".strip(),
-                'email_sent': email_sent,
-                'email_error': email_err,
-            })
+            if skip_email:
+                email_sent, email_err = False, 'skipped'
+            else:
+                email_sent, email_err = _send_welcome_email(email, f"{first_name} {last_name}".strip(), password)
+            created.append({'email': email, 'name': f"{first_name} {last_name}".strip(),
+                            'email_sent': email_sent, 'email_error': email_err})
         except Exception as e:
             failed.append({'email': email, 'reason': str(e)})
 
+    db.commit()
     return jsonify({
-        'message': (
-            f"Import complete: {len(created)} created, {len(updated)} updated, "
-            f"{len(skipped)} skipped, {len(failed)} failed"
-        ),
-        'created': created,
-        'updated': updated,
-        'skipped': skipped,
-        'failed': failed,
+        'message': f'Import complete: {len(created)} created, {len(updated)} updated, {len(skipped)} skipped',
+        'created': created, 'updated': updated, 'skipped': skipped, 'failed': failed,
     }), 200

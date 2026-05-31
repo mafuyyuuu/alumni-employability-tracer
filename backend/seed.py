@@ -15,69 +15,17 @@ def seed():
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
 
-    # ── Users (insert per email — safe to re-run) ──────────────────────
-    # Columns: first_name, middle_name, last_name, email, password_hash, role,
-    #          course, graduation_year, age, employed, account_status,
-    #          avg_grade, avg_prof_grade, avg_elec_grade, ojt_grade, soft_skills, hard_skills,
-    #          months_to_employment (NULL = unemployed or unknown)
-    users = [
-        ('Admin', '', 'PLP', 'admin@plp.edu.ph', hash_pw('admin123'), 'admin',
-         '', 2020, 30, 1, 'Active', 0, 0, 0, 0, 0, 0, None),
-        # BSCS
-        ('Juan', 'D.', 'Cruz', 'juan@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSCS', 2022, 25, 1, 'Active', 90.0, 88.0, 87.0, 91.0, 80.0, 63.0, 3),
-        ('Carlos', '', 'Villanueva', 'carlos@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSCS', 2021, 26, 1, 'Active', 92.0, 90.0, 89.0, 93.0, 83.0, 68.0, 4),
-        # BSIT
-        ('Maria', '', 'Santos', 'maria@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSIT', 2023, 23, 1, 'Active', 85.0, 84.0, 82.0, 88.0, 75.0, 70.0, 2),
-        ('Ramon', '', 'Dela Cruz', 'ramon@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSIT', 2022, 24, 1, 'Active', 83.0, 81.0, 80.0, 85.0, 73.0, 67.0, 5),
-        # BSEd
-        ('Pedro', '', 'Reyes', 'pedro@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSEd', 2021, 26, 0, 'Active', 78.0, 76.0, 77.0, 80.0, 72.0, 55.0, None),
-        ('Liza', '', 'Navarro', 'liza@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSEd', 2023, 23, 1, 'Active', 82.0, 80.0, 81.0, 84.0, 74.0, 57.0, 8),
-        # BSBA
-        ('Ana', '', 'Gonzales', 'ana@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSBA', 2022, 25, 1, 'Active', 88.0, 85.0, 86.0, 89.0, 78.0, 60.0, 4),
-        ('Sofia', '', 'Ramos', 'sofia@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSBA', 2023, 23, 1, 'Active', 86.0, 83.0, 84.0, 87.0, 76.0, 58.0, 7),
-        # BSA
-        ('Jose', '', 'Mendoza', 'jose@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSA', 2020, 27, 0, 'Inactive', 72.0, 70.0, 71.0, 75.0, 65.0, 50.0, None),
-        ('Cris', '', 'Bautista', 'cris@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSA', 2022, 25, 1, 'Active', 84.0, 82.0, 83.0, 86.0, 75.0, 62.0, 6),
-        # BSHM
-        ('Rosa', '', 'Aquino', 'rosa@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSHM', 2023, 23, 1, 'Active', 86.0, 84.0, 85.0, 87.0, 76.0, 62.0, 3),
-        ('Marco', '', 'Ferrer', 'marco@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSHM', 2022, 24, 0, 'Active', 80.0, 78.0, 79.0, 82.0, 71.0, 58.0, None),
-        # BSN (College of Nursing)
-        ('Lea', '', 'Morales', 'lea@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSN', 2023, 23, 1, 'Active', 88.0, 86.0, 85.0, 89.0, 77.0, 65.0, 2),
-        ('Nilo', '', 'Batungbakal', 'nilo@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSN', 2022, 24, 0, 'Active', 80.0, 78.0, 79.0, 82.0, 71.0, 58.0, None),
-        ('Grace', '', 'Tolentino', 'grace@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSN', 2021, 26, 1, 'Active', 85.0, 83.0, 84.0, 87.0, 74.0, 61.0, 5),
-    ]
-
-    for user in users:
-        c.execute("SELECT id FROM users WHERE email = ?", [user[3]])
-        if not c.fetchone():
-            c.execute("""
-                INSERT INTO users (first_name, middle_name, last_name, email, password_hash,
-                    role, course, graduation_year, age, employed, account_status,
-                    avg_grade, avg_prof_grade, avg_elec_grade, ojt_grade, soft_skills, hard_skills,
-                    months_to_employment)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """, user)
-        else:
-            # Backfill months_to_employment for existing seed users that don't have it
-            c.execute("""
-                UPDATE users SET months_to_employment = ?
-                WHERE email = ? AND months_to_employment IS NULL AND employed = 1
-            """, [user[17], user[3]])
+    # ── Admin account only — alumni come from uploaded datasets ──────────
+    c.execute("SELECT id FROM users WHERE email = 'admin@plp.edu.ph'")
+    if not c.fetchone():
+        c.execute("""
+            INSERT INTO users (first_name, middle_name, last_name, email, password_hash,
+                role, course, graduation_year, age, employed, account_status,
+                avg_grade, avg_prof_grade, avg_elec_grade, ojt_grade, soft_skills, hard_skills,
+                months_to_employment)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, ('Admin', '', 'PLP', 'admin@plp.edu.ph', hash_pw('admin123'), 'admin',
+              '', 2020, 30, 1, 'Active', 0, 0, 0, 0, 0, 0, None))
 
     # ── Companies ──────────────────────────────────────────────────────
     companies = [
@@ -138,35 +86,6 @@ def seed():
             VALUES (?,?,?,?,?,?,?,?,?)
         """, jobs)
 
-    # ── Employment data (historical) ───────────────────────────────────
-    emp_data = [
-        (2019, 58.2, 60.0, 56.0, 2910, 2090),
-        (2020, 52.1, 54.0, 50.0, 2605, 2395),
-        (2021, 61.4, 63.0, 59.0, 3070, 1930),
-        (2022, 65.8, 67.0, 64.0, 3290, 1710),
-    ]
-
-    c.execute("SELECT COUNT(*) FROM employment_data")
-    if c.fetchone()[0] == 0:
-        c.executemany("""
-            INSERT INTO employment_data (year, overall_rate, male_rate, female_rate, employed_count, unemployed_count)
-            VALUES (?,?,?,?,?,?)
-        """, emp_data)
-
-    # ── Program rates (per year+course — safe to re-run) ──────────────
-    prog_rates = [
-        (2023, 'BSCS', 82), (2023, 'BSIT', 78), (2023, 'BSBA', 74),
-        (2023, 'BSEd', 71), (2023, 'BSA', 68), (2023, 'BSHM', 65), (2023, 'BSN', 79),
-        (2022, 'BSCS', 79), (2022, 'BSIT', 75), (2022, 'BSBA', 71),
-        (2022, 'BSEd', 68), (2022, 'BSA', 65), (2022, 'BSHM', 62), (2022, 'BSN', 76),
-        (2021, 'BSCS', 74), (2021, 'BSIT', 70), (2021, 'BSBA', 66),
-        (2021, 'BSEd', 63), (2021, 'BSA', 60), (2021, 'BSHM', 58), (2021, 'BSN', 72),
-    ]
-
-    for rate in prog_rates:
-        c.execute("SELECT id FROM program_rates WHERE year = ? AND course = ?", [rate[0], rate[1]])
-        if not c.fetchone():
-            c.execute("INSERT INTO program_rates (year, course, rate) VALUES (?,?,?)", rate)
 
     # ── Voter config ──────────────────────────────────────────────────
     voter_fields = [
@@ -193,76 +112,7 @@ def seed():
             INSERT INTO prediction_settings (id, use_voter_weights) VALUES (1, 0)
         """)
 
-    # ── Reports ───────────────────────────────────────────────────────
-    reps = [
-        ('Employment Forecast Report 2024', 'PDF', '2019–2024', 'ARIMA (2,1,2)', 'Ready'),
-        ('Annual Graduate Outcomes 2023', 'Excel', '2019–2023', 'ARIMA (2,1,2)', 'Ready'),
-        ('ARIMA Model Accuracy Summary', 'PDF', '2019–2023', 'ARIMA (2,1,2)', 'Ready'),
-        ('Employment by Program (2019–2023)', 'Excel', '2019–2023', 'ARIMA (2,1,2)', 'Ready'),
-    ]
 
-    c.execute("SELECT COUNT(*) FROM reports")
-    if c.fetchone()[0] == 0:
-        c.executemany("""
-            INSERT INTO reports (name, type, year_range, model_name, status) VALUES (?,?,?,?,?)
-        """, reps)
-
-    # ── Model uploads ─────────────────────────────────────────────────
-    uploads = [
-        ('Employment Forecast Model v1', 'model2019-2024.csv', 485625, 2, 'Active'),
-        ('Employment Data 2019–2024', 'employment2019-2024.csv', 485625, 2, 'Active'),
-        ('ALCO Model 2019–2024', 'alco_model2019-2024.csv', 485625, 2, 'Active'),
-    ]
-
-    c.execute("SELECT COUNT(*) FROM model_uploads")
-    if c.fetchone()[0] == 0:
-        c.executemany("""
-            INSERT INTO model_uploads (name, original_filename, file_size, records, status) VALUES (?,?,?,?,?)
-        """, uploads)
-
-    # ── Notifications ─────────────────────────────────────────────────
-    c.execute("SELECT id FROM users WHERE email = 'juan@plp.edu.ph'")
-    juan = c.fetchone()
-    if juan:
-        uid = juan[0]
-        c.execute("SELECT COUNT(*) FROM notifications WHERE user_id = ?", [uid])
-        if c.fetchone()[0] == 0:
-            notifs = [
-                (uid, 'New Job Match', 'A UI/UX Designer role at Facebook matches your profile!', 0),
-                (uid, 'Profile Reminder', 'Complete your profile to improve job recommendations.', 0),
-                (uid, 'Welcome to PLP Alumni Portal', 'Start exploring job opportunities matched to your degree.', 1),
-            ]
-            c.executemany("""
-                INSERT INTO notifications (user_id, title, message, is_read) VALUES (?,?,?,?)
-            """, notifs)
-
-    # ── Feedbacks ─────────────────────────────────────────────────────
-    c.execute("SELECT COUNT(*) FROM feedbacks")
-    if c.fetchone()[0] == 0:
-        c.execute("SELECT id FROM users WHERE email = 'juan@plp.edu.ph'")
-        u1 = c.fetchone()
-        c.execute("SELECT id FROM users WHERE email = 'maria@plp.edu.ph'")
-        u2 = c.fetchone()
-        c.execute("SELECT id FROM users WHERE email = 'pedro@plp.edu.ph'")
-        u3 = c.fetchone()
-        c.execute("SELECT id FROM users WHERE email = 'ana@plp.edu.ph'")
-        u4 = c.fetchone()
-        c.execute("SELECT id FROM users WHERE email = 'rosa@plp.edu.ph'")
-        u5 = c.fetchone()
-        c.execute("SELECT id FROM users WHERE email = 'lea@plp.edu.ph'")
-        u6 = c.fetchone()
-        feedback_data = []
-        if u1: feedback_data.append((u1[0], 'hired', 'Facebook', 'Frontend Dev', '1 year', 'Remote', 'Full-time'))
-        if u2: feedback_data.append((u2[0], 'elsewhere', 'SM Retail', 'IT Support', '6 months', 'On-site', 'Full-time'))
-        if u3: feedback_data.append((u3[0], 'looking', '', '', '', '', ''))
-        if u4: feedback_data.append((u4[0], 'hired', 'BDO Unibank', 'Bank Teller', '2 years', 'On-site', 'Full-time'))
-        if u5: feedback_data.append((u5[0], 'elsewhere', 'Jollibee', 'Shift Manager', '8 months', 'On-site', 'Full-time'))
-        if u6: feedback_data.append((u6[0], 'hired', 'Philippine General Hospital', 'Staff Nurse', '1 year', 'On-site', 'Full-time'))
-        if feedback_data:
-            c.executemany("""
-                INSERT INTO feedbacks (user_id, employment_status, company, position, duration, work_setup, employment_type)
-                VALUES (?,?,?,?,?,?,?)
-            """, feedback_data)
 
     # ── Voter config: add board_passer if missing ─────────────────────
     c.execute("SELECT id FROM voter_config WHERE field_key = 'board_passer'")

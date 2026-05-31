@@ -1,11 +1,20 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import CompanyLayout from '../../components/company/CompanyLayout'
-import { MdAdd, MdEdit, MdDelete, MdClose, MdWork, MdSearch } from 'react-icons/md'
+import {
+  MdAdd, MdEdit, MdDelete, MdClose, MdWork, MdSearch,
+  MdPeople, MdCheckCircle, MdCancel, MdHourglassEmpty, MdArrowBack,
+} from 'react-icons/md'
 import api from '../../services/api'
 
 const JOB_TYPES = ['Full-time', 'Part-time', 'Contract', 'Internship']
 const CATEGORIES = ['IT & Software', 'Business', 'Healthcare', 'Education', 'Engineering', 'Hospitality', 'Finance', 'Other']
+
+const statusStyle = {
+  Pending:  { bg: '#fffbeb', color: '#b45309', Icon: MdHourglassEmpty },
+  Accepted: { bg: '#f0fdf4', color: '#15803d', Icon: MdCheckCircle },
+  Rejected: { bg: '#fef2f2', color: '#dc2626', Icon: MdCancel },
+}
 
 function JobModal({ job, onClose, onSaved }) {
   const isEdit = !!job?.id
@@ -108,14 +117,138 @@ function JobModal({ job, onClose, onSaved }) {
   )
 }
 
+function ApplicantsPanel({ job, onClose }) {
+  const [applicants, setApplicants] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [updating, setUpdating] = useState(null)
+
+  useEffect(() => {
+    api.get(`/company/jobs/${job.id}/applicants`)
+      .then(r => setApplicants(r.data.applicants || []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [job.id])
+
+  function updateStatus(appId, status) {
+    setUpdating(appId)
+    api.put(`/company/applications/${appId}/status`, { status })
+      .then(() => {
+        setApplicants(prev => prev.map(a => a.id === appId ? { ...a, status } : a))
+      })
+      .catch(() => {})
+      .finally(() => setUpdating(null))
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
+      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+            <MdArrowBack className="text-lg" />
+          </button>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-gray-900 truncate">{job.title}</p>
+            <p className="text-xs text-gray-400">{applicants.length} applicant{applicants.length !== 1 ? 's' : ''}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+            <MdClose />
+          </button>
+        </div>
+
+        {/* List */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-3">
+          {loading && <p className="text-sm text-gray-400 text-center py-10">Loading…</p>}
+
+          {!loading && applicants.length === 0 && (
+            <div className="text-center py-14">
+              <MdPeople className="text-3xl text-gray-300 mx-auto mb-2" />
+              <p className="text-sm text-gray-400">No applicants yet</p>
+            </div>
+          )}
+
+          {applicants.map(a => {
+            const s = statusStyle[a.status] || statusStyle.Pending
+            const Icon = s.Icon
+            const name = [a.first_name, a.last_name].filter(Boolean).join(' ') || 'Unknown'
+            return (
+              <div key={a.id} className="bg-gray-50 rounded-2xl p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                      style={{ background: '#0f2d1a' }}>
+                      {name[0]}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-gray-900 truncate">{name}</p>
+                      <p className="text-xs text-gray-500">{a.email}</p>
+                    </div>
+                  </div>
+                  <span className="flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0"
+                    style={{ background: s.bg, color: s.color }}>
+                    <Icon className="text-xs" />{a.status}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <span className="text-xs px-2 py-0.5 rounded-full font-semibold"
+                    style={{ background: '#e6ede8', color: '#0f2d1a' }}>{a.course}</span>
+                  {a.graduation_year && (
+                    <span className="text-xs text-gray-400">Class of {a.graduation_year}</span>
+                  )}
+                  {a.avg_grade > 0 && (
+                    <span className="text-xs text-gray-400">GWA {a.avg_grade?.toFixed(1)}</span>
+                  )}
+                </div>
+
+                <p className="text-[10px] text-gray-400 mt-2">
+                  Applied {a.applied_at?.slice(0, 10)}
+                </p>
+
+                {a.cover_letter && (
+                  <p className="text-xs text-gray-500 mt-2 bg-white rounded-xl p-3 border border-gray-100 leading-relaxed">
+                    {a.cover_letter}
+                  </p>
+                )}
+
+                {a.status === 'Pending' && (
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      onClick={() => updateStatus(a.id, 'Accepted')}
+                      disabled={updating === a.id}
+                      className="flex-1 flex items-center justify-center gap-1 py-2 rounded-xl text-xs font-bold text-white transition-all disabled:opacity-50 hover:opacity-90"
+                      style={{ background: '#0f2d1a' }}>
+                      <MdCheckCircle className="text-sm" />
+                      {updating === a.id ? 'Saving…' : 'Accept'}
+                    </button>
+                    <button
+                      onClick={() => updateStatus(a.id, 'Rejected')}
+                      disabled={updating === a.id}
+                      className="flex-1 flex items-center justify-center gap-1 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50 hover:bg-red-50"
+                      style={{ color: '#dc2626', border: '1.5px solid #fecaca' }}>
+                      <MdCancel className="text-sm" />
+                      {updating === a.id ? 'Saving…' : 'Reject'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function CompanyJobs() {
   const [searchParams] = useSearchParams()
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  const [modal, setModal] = useState(null) // null | 'new' | job object
+  const [modal, setModal] = useState(null)
   const [deleting, setDeleting] = useState(null)
+  const [applicantsJob, setApplicantsJob] = useState(null)
 
   function fetchJobs() {
     setLoading(true)
@@ -145,6 +278,10 @@ export default function CompanyJobs() {
           onClose={() => setModal(null)}
           onSaved={fetchJobs}
         />
+      )}
+
+      {applicantsJob && (
+        <ApplicantsPanel job={applicantsJob} onClose={() => setApplicantsJob(null)} />
       )}
 
       <div className="p-4 sm:p-6 page-enter">
@@ -225,6 +362,11 @@ export default function CompanyJobs() {
                 </span>
               </div>
               <div className="col-span-2 flex justify-end gap-1">
+                <button onClick={() => setApplicantsJob(job)}
+                  className="p-1.5 text-gray-400 hover:text-green-600 transition-colors rounded-lg hover:bg-green-50"
+                  title="View applicants">
+                  <MdPeople className="text-sm" />
+                </button>
                 <button onClick={() => setModal(job)} className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors rounded-lg hover:bg-blue-50">
                   <MdEdit className="text-sm" />
                 </button>
