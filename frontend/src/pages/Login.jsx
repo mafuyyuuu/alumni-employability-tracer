@@ -134,7 +134,9 @@ export default function Login() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
-                      className={`${inputBase} ${inputFocus} pr-12`}
+                      autoComplete="current-password"
+                      style={{ WebkitTextSecurity: showPass ? 'none' : undefined }}
+                      className={`${inputBase} ${inputFocus} pr-12 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden`}
                     />
                     <button
                       type="button"

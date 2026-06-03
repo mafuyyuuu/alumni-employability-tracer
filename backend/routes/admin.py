@@ -80,6 +80,86 @@ def _run_training_background(app, db_path, dataset_year):
             _training_job = {'status': 'error', 'result': None, 'error': str(exc)}
 
 
+def _run_import_and_training_background(app, db_path, file_path, safe_name,
+                                         dataset_year, retrain, upload_id,
+                                         create_accounts, skip_email,
+                                         conflict_mode):
+    """Run CSV/Excel import + optional retraining fully in background."""
+    global _training_job
+    try:
+        with app.app_context():
+            db = get_db()
+
+            if conflict_mode == 'overwrite' and dataset_year:
+                db.execute("DELETE FROM ml_training_rows WHERE graduation_year = ?", [dataset_year])
+                db.commit()
+
+            def _prog(done, total):
+                pct = 5 + int((done / total) * 55)
+                _set_progress('importing', pct, f'Importing rows… {done}/{total}', total, done)
+
+            _set_progress('importing', 5, 'Importing data…')
+            import_result = import_training_csv(
+                database_path=db_path,
+                csv_path=file_path,
+                source_name=safe_name,
+                year_override=dataset_year,
+                progress_callback=_prog,
+            )
+            _set_progress('importing', 60, 'Import complete')
+            db.execute(
+                "UPDATE model_uploads SET applied_to_training = 1, status = 'Imported' WHERE id = ?",
+                [upload_id],
+            )
+            db.commit()
+
+            # Create alumni accounts if requested
+            if create_accounts and dataset_year:
+                try:
+                    _create_alumni_accounts_from_dataset(
+                        db, dataset_year, skip_email=skip_email
+                    )
+                except Exception:
+                    pass
+
+            if retrain:
+                _set_progress('training', 62, 'Retraining models…')
+                with _training_lock:
+                    _training_job = {'status': 'running', 'result': None, 'error': None}
+                rf_metadata = train_random_forest(database_path=db_path)
+                _set_progress('training', 82, 'Training Linear Regression…')
+                lr_metadata = train_linear_employability(database_path=db_path)
+                _set_progress('training', 93, 'Loading models…')
+                ml_predictor._load_models()
+                forecast = None
+                if dataset_year:
+                    try:
+                        _set_progress('training', 96, 'Computing forecast…')
+                        forecast = _auto_forecast_3yr(get_db(), dataset_year)
+                    except Exception:
+                        forecast = None
+                _set_progress('done', 100, 'Upload complete')
+                with _training_lock:
+                    _training_job = {
+                        'status': 'done',
+                        'result': {'rf': rf_metadata, 'lr': lr_metadata,
+                                   'forecast': forecast, 'import': import_result},
+                        'error': None,
+                    }
+            else:
+                _set_progress('done', 100, 'Import complete')
+                with _training_lock:
+                    _training_job = {
+                        'status': 'done',
+                        'result': {'import': import_result},
+                        'error': None,
+                    }
+    except Exception as exc:
+        _set_progress('error', 0, str(exc))
+        with _training_lock:
+            _training_job = {'status': 'error', 'result': None, 'error': str(exc)}
+
+
 def _send_welcome_email(to_email, name, password):
     smtp_host = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
     smtp_port = int(os.environ.get('SMTP_PORT', 587))
@@ -2603,54 +2683,25 @@ def upload_model():
 
     if apply_to_training and is_tabular:
         db_path = current_app.config.get('DATABASE', os.getenv('DATABASE', 'plp_alumni.db'))
-        _set_progress('importing', 5, 'Starting import…')
-        try:
-            def _import_progress(done, total):
-                pct = 5 + int((done / total) * 55)  # 5% → 60%
-                _set_progress('importing', pct, f'Importing rows… {done}/{total}', total, done)
+        create_accounts = _is_truthy(request.form.get('create_accounts'), default=False)
+        skip_email = _is_truthy(request.form.get('skip_email'), default=True)
 
-            import_result = import_training_csv(
-                database_path=db_path,
-                csv_path=file_path,
-                source_name=safe_name,
-                year_override=dataset_year,
-                progress_callback=_import_progress,
-            )
-            _set_progress('importing', 60, 'Import complete')
-            db.execute(
-                "UPDATE model_uploads SET applied_to_training = 1, status = 'Imported' WHERE id = ?",
-                [cur.lastrowid],
-            )
-            db.commit()
-            training_policy = 'uploaded_csv_imported'
-        except ValueError as exc:
-            db.execute(
-                "UPDATE model_uploads SET status = 'Import Failed' WHERE id = ?",
-                [cur.lastrowid],
-            )
-            db.commit()
-            return jsonify({'error': str(exc)}), 400
+        # Run import (+ optional retrain) fully in background to avoid Render's 60s timeout
+        global _training_job
+        with _training_lock:
+            _training_job = {'status': 'running', 'result': None, 'error': None}
+        _set_progress('importing', 2, 'Starting import in background…')
 
-        if retrain_after_import:
-            _set_progress('training', 62, 'Retraining models…')
-            global _training_job
-            with _training_lock:
-                _training_job = {'status': 'running', 'result': None, 'error': None}
-            app = current_app._get_current_object()
-            t = threading.Thread(
-                target=_run_training_background,
-                args=(app, db_path, dataset_year),
-                daemon=True,
-            )
-            t.start()
-            training_policy = 'uploaded_csv_imported_and_retraining_async'
-        else:
-            # ── Auto-forecast 3 years ahead (no retrain requested) ────────────
-            if dataset_year:
-                try:
-                    forecast = _auto_forecast_3yr(db, dataset_year)
-                except Exception:
-                    forecast = None
+        app_obj = current_app._get_current_object()
+        t = threading.Thread(
+            target=_run_import_and_training_background,
+            args=(app_obj, db_path, file_path, safe_name,
+                  dataset_year, retrain_after_import, cur.lastrowid,
+                  create_accounts, skip_email, conflict_mode),
+            daemon=True,
+        )
+        t.start()
+        training_policy = 'async_import_and_training'
 
     upload_row = db.execute(
         "SELECT * FROM model_uploads WHERE id = ?", [cur.lastrowid]
