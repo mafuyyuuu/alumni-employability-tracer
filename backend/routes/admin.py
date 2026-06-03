@@ -2110,20 +2110,100 @@ def model_status():
     return jsonify({'model': predictor_status()}), 200
 
 
+def _sync_users_to_training_rows(db):
+    """Copy alumni user records into ml_training_rows so models can train."""
+    alumni = db.execute("""
+        SELECT id, first_name, last_name, email, course, graduation_year, age,
+               avg_grade, avg_prof_grade, avg_elec_grade, ojt_grade,
+               soft_skills, hard_skills, board_passer, board_exam_score, employed
+        FROM users
+        WHERE role = 'alumni' AND graduation_year IS NOT NULL
+    """).fetchall()
+
+    inserted = 0
+    for u in alumni:
+        source_row_id = f"user_{u['id']}"
+        name = f"{u['first_name'] or ''} {u['last_name'] or ''}".strip()
+        try:
+            db.execute("""
+                INSERT INTO ml_training_rows (
+                    source_name, source_row_id, name, email, course,
+                    graduation_year, age, avg_grade, avg_prof_grade,
+                    avg_elec_grade, ojt_grade, soft_skills, hard_skills,
+                    board_passer, board_exam_score, employed, is_active, imported_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,datetime('now'))
+                ON CONFLICT(source_name, source_row_id) DO UPDATE SET
+                    avg_grade=excluded.avg_grade,
+                    avg_prof_grade=excluded.avg_prof_grade,
+                    avg_elec_grade=excluded.avg_elec_grade,
+                    ojt_grade=excluded.ojt_grade,
+                    soft_skills=excluded.soft_skills,
+                    hard_skills=excluded.hard_skills,
+                    employed=excluded.employed,
+                    is_active=1
+            """, [
+                'users_sync', source_row_id, name, u['email'] or '',
+                u['course'] or '', int(u['graduation_year']),
+                int(u['age'] or 22),
+                float(u['avg_grade'] or 0), float(u['avg_prof_grade'] or 0),
+                float(u['avg_elec_grade'] or 0), float(u['ojt_grade'] or 0),
+                float(u['soft_skills'] or 0), float(u['hard_skills'] or 0),
+                int(u['board_passer'] or 0), float(u['board_exam_score'] or 0),
+                int(u['employed'] or 0),
+            ])
+            inserted += 1
+        except Exception:
+            continue
+    db.commit()
+    return inserted
+
+
+@admin_bp.route('/models/sync-and-retrain', methods=['POST'])
+@admin_required
+def sync_and_retrain():
+    """Sync users → ml_training_rows then retrain models. Used when background import failed."""
+    db = get_db()
+    db_path = current_app.config.get('DATABASE', os.getenv('DATABASE', 'plp_alumni.db'))
+
+    synced = _sync_users_to_training_rows(db)
+    total_rows = db.execute(
+        "SELECT COUNT(*) FROM ml_training_rows WHERE is_active=1"
+    ).fetchone()[0]
+
+    if total_rows == 0:
+        return jsonify({'error': 'No alumni data found to train on.'}), 400
+
+    rf_metadata = train_random_forest(database_path=db_path)
+    lr_metadata = train_linear_employability(database_path=db_path)
+    ml_predictor._load_models()
+    return jsonify({
+        'message': f'Synced {synced} users and retrained models.',
+        'synced_rows': synced,
+        'total_training_rows': total_rows,
+        'models': {'rf': rf_metadata, 'lr': lr_metadata},
+    }), 200
+
+
 @admin_bp.route('/models/retrain', methods=['POST'])
 @admin_required
 def retrain_model():
+    db = get_db()
     db_path = current_app.config.get('DATABASE', os.getenv('DATABASE', 'plp_alumni.db'))
+
+    # Auto-sync from users if training rows are empty
+    total_rows = db.execute(
+        "SELECT COUNT(*) FROM ml_training_rows WHERE is_active=1"
+    ).fetchone()[0]
+    if total_rows == 0:
+        _sync_users_to_training_rows(db)
+
     rf_metadata = train_random_forest(database_path=db_path)
     lr_metadata = train_linear_employability(database_path=db_path)
     ml_predictor._load_models()
     return jsonify({
         'message': 'Model retrained successfully',
         'model': rf_metadata,
-        'models': {
-            'rf': rf_metadata,
-            'lr': lr_metadata,
-        },
+        'models': {'rf': rf_metadata, 'lr': lr_metadata},
     }), 200
 
 
