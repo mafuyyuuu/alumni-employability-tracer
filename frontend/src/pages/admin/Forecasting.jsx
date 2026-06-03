@@ -34,26 +34,13 @@ const CustomTooltip = ({ active, payload, label }) => {
   )
 }
 
-// Pick best model: highest R², but skip models whose forecast is flat
-// (flat = all projected values within 1 % of each other — no useful trend)
-function pickBest(metrics, projections) {
+// Pick best model by highest R² — consistent across all horizons
+function pickBest(metrics) {
   const keys = ['lr', 'rf', 'arima']
-
-  function isFlat(key) {
-    const vals = (projections[key] || []).map(p => parseFloat(p.val)).filter(v => !isNaN(v))
-    if (vals.length < 2) return false
-    return Math.max(...vals) - Math.min(...vals) < 1.0
-  }
-
-  // Prefer non-flat models; fall back to all if every model is flat
-  const candidates = keys.filter(k => !isFlat(k))
-  const pool = candidates.length > 0 ? candidates : keys
-
-  const r2s = pool.map(k => ({ k, v: typeof metrics[k]?.r2 === 'number' ? metrics[k].r2 : -Infinity }))
+  const r2s = keys.map(k => ({ k, v: typeof metrics[k]?.r2 === 'number' ? metrics[k].r2 : -Infinity }))
   const best = r2s.reduce((a, b) => b.v > a.v ? b : a, r2s[0])
   if (best.v > -Infinity) return best.k
-
-  const mapes = pool.map(k => ({ k, v: typeof metrics[k]?.mape === 'number' ? metrics[k].mape : Infinity }))
+  const mapes = keys.map(k => ({ k, v: typeof metrics[k]?.mape === 'number' ? metrics[k].mape : Infinity }))
   return mapes.reduce((a, b) => b.v < a.v ? b : a, mapes[0]).k
 }
 
@@ -70,7 +57,7 @@ export default function Forecasting() {
     const allData = r.data.data || []
     const mets  = r.data.metrics || {}
     const projs = r.data.projections || {}
-    const best  = pickBest(mets, projs)
+    const best  = pickBest(mets)
     setRawData(allData)
     setProjections(projs)
     setMetrics(mets)
