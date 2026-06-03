@@ -22,11 +22,15 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
-    # CORS — allow the Vite dev server
-    CORS(app, resources={r"/api/*": {"origins": [
+    # CORS — allow dev server and production Vercel domains
+    allowed_origins = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-    ]}}, supports_credentials=True)
+        os.environ.get("FRONTEND_URL", ""),
+    ]
+    # Allow all Vercel preview/production URLs for this project
+    CORS(app, resources={r"/api/*": {"origins": [o for o in allowed_origins if o]}},
+         supports_credentials=True)
 
     JWTManager(app)
 

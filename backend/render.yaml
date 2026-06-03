@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: plp-alumni-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn "app:create_app()" --workers 2 --bind 0.0.0.0:$PORT --timeout 120
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: DATABASE
+        value: /opt/render/project/src/backend/plp_alumni.db
+      - key: FLASK_ENV
+        value: production
