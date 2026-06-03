@@ -708,7 +708,7 @@ export default function UploadModel() {
     setRetraining(true)
     setStatusError('')
     try {
-      await api.post('/admin/models/retrain', {})
+      await api.post('/admin/models/sync-and-retrain', {})
       await loadModelStatus()
     } catch (err) {
       setStatusError(err.response?.data?.error || 'Model retraining failed')
