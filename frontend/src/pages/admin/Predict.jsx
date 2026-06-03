@@ -144,7 +144,7 @@ export default function Predict() {
                         ? 'bg-emerald-900 text-white'
                         : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                     }`}>
-                    {t === 'All' ? 'All' : t === 'High Employable' ? 'High' : t === 'Employable' ? 'Mid' : 'Least'}
+                    {t === 'All' ? 'All' : t === 'Likely Employable' ? 'Likely' : t === 'Employable' ? 'Mid' : 'Least'}
                   </button>
                 ))}
               </div>

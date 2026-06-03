@@ -84,16 +84,14 @@ export default function Forecasting() {
     api.get('/admin/forecasting').then(r => setCourseData(r.data.course_data || [])).catch(() => {})
   }, [])
 
-  function runForecast() {
+  function runForecast(h = horizon) {
     setRunning(true)
-    api.post('/admin/forecasting/run-all', { horizon: horizon + 1 })
+    api.post('/admin/forecasting/run-all', { horizon: h + 1 })
       .then(applyResult).catch(() => {}).finally(() => setRunning(false))
   }
 
   // Build simplified chart: 'rate' (historical) + best model as 'forecast'
-  // Bridge: extend the solid historical line one point into 2024 so it meets the dashed line.
-  // This keeps 2023 as solid-only and 2024 as the clean handoff point.
-  const trimmed = horizon === 0 ? rawData.slice(0, 7) : horizon === 1 ? rawData.slice(0, 8) : rawData
+  const trimmed = rawData
   const lastHistIdx = trimmed.reduce((acc, d, i) => (d.rate != null ? i : acc), -1)
   const lastHistRate = lastHistIdx >= 0 ? (trimmed[lastHistIdx]?.rate ?? null) : null
 
@@ -141,7 +139,7 @@ export default function Forecasting() {
               <label className="block text-xs font-semibold mb-1.5" style={{ color: '#0f2d1a' }}>Forecast Horizon</label>
               <div className="flex gap-2">
                 {HORIZON_OPTIONS.map((y, i) => (
-                  <button key={y} onClick={() => setHorizon(i)}
+                  <button key={y} onClick={() => { setHorizon(i); runForecast(i) }}
                     className="flex-1 py-2 text-xs font-semibold rounded-xl border transition-all"
                     style={horizon === i
                       ? { background: '#0f2d1a', color: '#fff', borderColor: '#0f2d1a' }
