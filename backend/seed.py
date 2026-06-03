@@ -27,64 +27,13 @@ def seed():
         """, ('Admin', '', 'PLP', 'admin@plp.edu.ph', hash_pw('admin123'), 'admin',
               '', 2020, 30, 1, 'Active', 0, 0, 0, 0, 0, 0, None))
 
-    # ── Companies ──────────────────────────────────────────────────────
-    companies = [
-        ('Facebook / Meta', 'Technology', 'Pasay', 'Large', 'Global social media company', 'Active'),
-        ('Jollibee Foods', 'F&B', 'Pasig City', 'Large', 'Leading fast food chain', 'Active'),
-        ('SM Retail', 'Retail', 'Pasig City', 'Large', 'Major retail conglomerate', 'Active'),
-        ('BDO Unibank', 'Banking', 'Makati', 'Large', 'Largest bank in the Philippines', 'Active'),
-        ('Accenture PH', 'IT Services', 'BGC', 'Large', 'Global consulting and IT services', 'Active'),
-        ('PLDT', 'Telecom', 'Makati', 'Large', 'Major telecommunications company', 'Inactive'),
-        ('Philippine General Hospital', 'Healthcare', 'Manila', 'Large', 'National tertiary government hospital', 'Active'),
-    ]
-
-    c.execute("SELECT COUNT(*) FROM companies")
-    if c.fetchone()[0] == 0:
-        c.executemany("""
+    # ── Accenture PH (needed for company login account) ──────────────
+    c.execute("SELECT id FROM companies WHERE name = 'Accenture PH'")
+    if not c.fetchone():
+        c.execute("""
             INSERT INTO companies (name, industry, location, size, description, status)
             VALUES (?,?,?,?,?,?)
-        """, companies)
-
-    # ── Jobs (with category for program-based matching) ───────────────
-    jobs = [
-        ('UI/UX Designer', 1, 'Facebook / Meta', 'Full-time', 'Pasay', '₱25,000–₱40,000/mo',
-         'Design user interfaces and create wireframes, prototypes, and high-fidelity mockups for web and mobile products. Conduct user research and usability testing. Collaborate closely with developers to bring designs to life.',
-         'IT & Software', 'Open'),
-        ('Web Developer', 1, 'Facebook / Meta', 'Part-time', 'Pasig City', '₱18,000–₱30,000/mo',
-         'Build and maintain responsive web applications using HTML, CSS, JavaScript, and React. Integrate REST APIs and ensure cross-browser compatibility. Experience with version control (Git) required.',
-         'IT & Software', 'Open'),
-        ('Data Analyst', 2, 'Jollibee Foods', 'Full-time', 'Quezon City', '₱20,000–₱35,000/mo',
-         'Analyze sales data, customer behavior, and operational metrics to support business decisions. Create dashboards using Excel and Tableau. Prepare weekly and monthly reports for management. SQL proficiency required.',
-         'IT & Software', 'Open'),
-        ('IT Support', 3, 'SM Retail', 'Contract', 'Pasig City', '₱15,000–₱20,000/mo',
-         'Provide Level 1 and Level 2 technical support to retail staff. Troubleshoot hardware, software, and network issues. Manage helpdesk tickets and escalate complex issues. Willing to work on shifting schedules.',
-         'IT & Networks', 'Open'),
-        ('Software Engineer', 5, 'Accenture PH', 'Full-time', 'BGC', '₱40,000–₱60,000/mo',
-         'Develop and maintain enterprise software solutions for international clients. Work with Java, Spring Boot, and React in an Agile environment. Participate in code reviews and contribute to architecture decisions.',
-         'IT & Software', 'Closed'),
-        ('Marketing Coordinator', 2, 'Jollibee Foods', 'Full-time', 'Ortigas', '₱22,000–₱32,000/mo',
-         'Support marketing campaigns for our iconic Filipino food brands. Create social media content, coordinate with agencies, and track campaign performance. Knowledge of digital marketing tools and analytics required.',
-         'Business & Management', 'Open'),
-        ('Accountant', 4, 'BDO Unibank', 'Full-time', 'BGC, Taguig', '₱25,000–₱40,000/mo',
-         'Handle general accounting duties including journal entries, bank reconciliation, and financial statement preparation. Ensure compliance with PFRS and BIR requirements. CPA board passers preferred.',
-         'Finance & Accounting', 'Open'),
-        ('Company Nurse', 7, 'Philippine General Hospital', 'Full-time', 'Manila', '₱25,000–₱38,000/mo',
-         'Provide healthcare services to hospital staff and patients. Conduct health assessments, administer first aid, manage medical records, and coordinate with occupational health programs. PRC-licensed RN required.',
-         'Healthcare & Nursing', 'Open'),
-        ('Hotel Operations Trainee', 3, 'SM Retail', 'Full-time', 'Pasay', '₱18,000–₱25,000/mo',
-         'Join our management trainee program covering front desk operations, housekeeping, and food and beverage service. Ideal for BSHM graduates seeking to build a hotel career. Willing to rotate across departments.',
-         'Hospitality & Tourism', 'Open'),
-        ('HR Assistant', 2, 'Jollibee Foods', 'Full-time', 'Ortigas', '₱20,000–₱28,000/mo',
-         'Support HR operations including recruitment, onboarding, payroll coordination, and employee records management. Knowledge of Philippine labor law and HRIS is an advantage. Detail-oriented with strong interpersonal skills.',
-         'Business & Management', 'Open'),
-    ]
-
-    c.execute("SELECT COUNT(*) FROM jobs")
-    if c.fetchone()[0] == 0:
-        c.executemany("""
-            INSERT INTO jobs (title, company_id, company_name, type, location, salary, description, category, status)
-            VALUES (?,?,?,?,?,?,?,?,?)
-        """, jobs)
+        """, ('Accenture PH', 'IT Services', 'BGC', 'Large', 'Global consulting and IT services', 'Active'))
 
 
     # ── Voter config ──────────────────────────────────────────────────

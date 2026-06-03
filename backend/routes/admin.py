@@ -717,7 +717,7 @@ def dashboard():
         [latest_yr] if latest_yr else []
     ).fetchone()['cnt']
 
-    employment_rate = round(employed_count / non_graduating * 100, 1) if non_graduating > 0 else 69.6
+    employment_rate = round(employed_count / non_graduating * 100, 1) if non_graduating > 0 else 0
 
     # Historical employment data
     _ensure_employment_data_from_training(db)
@@ -755,8 +755,8 @@ def dashboard():
             'total_alumni': total_alumni,
             'employment_rate': employment_rate,
             'employment_rate_change': emp_change,
-            'graduate_success': 97.5,
-            'margin_of_error': margin_of_error,
+            'graduate_success': round(employed_count / total_alumni * 100, 1) if total_alumni > 0 else 0,
+            'margin_of_error': margin_of_error if chart_data else 0,
         },
         'employment_data': chart_data,
         'model_used': (forecast or {}).get('model_used', 'Linear Regression'),

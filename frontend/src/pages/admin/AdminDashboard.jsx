@@ -52,7 +52,7 @@ export default function AdminDashboard() {
   }, [model])
 
   const metricCards = [
-    { label: 'Total Alumni',     value: metrics.total_alumni,          sub: '+124 this year',                    icon: MdPeople,       color: '#0f2d1a', bg: '#e6ede8' },
+    { label: 'Total Alumni',     value: metrics.total_alumni ?? 0,     sub: 'Registered alumni',                 icon: MdPeople,       color: '#0f2d1a', bg: '#e6ede8' },
     { label: 'Employment Rate',  value: `${metrics.employment_rate}%`,  sub: `↑ ${metrics.employment_rate_change}% vs last year`, icon: MdTrendingUp, color: '#10b981', bg: '#f0fdf4' },
     { label: 'Graduate Success', value: `${metrics.graduate_success}%`, sub: 'Of total graduates',                icon: MdSchool,       color: '#2d6a4f', bg: '#e6ede8' },
     { label: 'Margin of Error',  value: `±${metrics.margin_of_error}%`, sub: 'Forecast model accuracy',           icon: MdErrorOutline, color: '#f59e0b', bg: '#fffbeb' },
