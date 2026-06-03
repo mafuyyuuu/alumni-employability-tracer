@@ -81,19 +81,14 @@ function TabUploadNew({ onUploaded, onStatusRefresh }) {
     if (!file) return
     setUploading(true)
     try {
-      const token = localStorage.getItem('token')
       const fd = new FormData()
       fd.append('file', file)
       fd.append('name', modelName || file.name)
       fd.append('apply_to_training', 'false')
       fd.append('retrain_after_import', 'false')
-      const res = await fetch('/api/admin/upload', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: fd,
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      const res = await api.post('/admin/upload', fd)
+      const data = res.data
+      if (!data) throw new Error('Empty response from server')
       setPolicy(data.training_policy || '')
       setImportSummary(data.import || null)
       setDone(true)
@@ -237,9 +232,6 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
     setProgress({ stage: 'uploading', percent: 0, message: 'Uploading file…' })
     startProgressPolling()
     try {
-      const token = localStorage.getItem('token')
-      const authHeader = { Authorization: `Bearer ${token}` }
-
       // Step 1: upload + training import
       const fd = new FormData()
       fd.append('file', file)
@@ -249,14 +241,17 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
       fd.append('dataset_year', String(datasetYear))
       if (conflictMode) fd.append('conflict_mode', conflictMode)
 
-      const res1 = await fetch('/api/admin/upload', { method: 'POST', headers: authHeader, body: fd })
-      const data1 = await res1.json()
-
-      if (res1.status === 409 && data1.year_conflict) {
-        setConflict({ year: data1.year, existing_count: data1.existing_count })
-        return
+      let data1
+      try {
+        const res1 = await api.post('/admin/upload', fd)
+        data1 = res1.data
+      } catch (err) {
+        if (err.response?.status === 409 && err.response?.data?.year_conflict) {
+          setConflict({ year: err.response.data.year, existing_count: err.response.data.existing_count })
+          return
+        }
+        throw new Error(err.response?.data?.error || err.message || 'Upload failed')
       }
-      if (!res1.ok) throw new Error(data1.error || `HTTP ${res1.status}`)
       onUploaded(data1.upload)
       setConflict(null)
 
@@ -267,8 +262,8 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
         fd2.append('file', file)
         fd2.append('dataset_year', String(datasetYear))
         fd2.append('skip_email', String(skipEmail))
-        const res2 = await fetch('/api/admin/users/bulk-import', { method: 'POST', headers: authHeader, body: fd2 })
-        accountResult = await res2.json()
+        const res2 = await api.post('/admin/users/bulk-import', fd2)
+        accountResult = res2.data
       }
 
       setResult({ training: data1, accounts: accountResult })
