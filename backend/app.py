@@ -54,19 +54,19 @@ def create_app():
     # Ensure upload folder exists
     os.makedirs(app.config.get('UPLOAD_FOLDER', 'uploads'), exist_ok=True)
 
+    # Init DB and seed on every startup (safe — seed uses INSERT OR IGNORE)
+    with app.app_context():
+        init_db()
+        try:
+            from seed import seed
+            seed()
+        except Exception as e:
+            print(f"Seed skipped: {e}")
+
     return app
 
 
 if __name__ == '__main__':
     app = create_app()
-
-    # Auto-init and seed on first run
-    init_db()
-    try:
-        from seed import seed
-        seed()
-    except Exception as e:
-        print(f"Seed skipped: {e}")
-
     print("PLP Alumni API running at http://localhost:5001")
     app.run(debug=True, use_reloader=False, port=5001, host='0.0.0.0')
