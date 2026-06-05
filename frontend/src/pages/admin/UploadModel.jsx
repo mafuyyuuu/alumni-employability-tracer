@@ -166,16 +166,21 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
 
   function startProgressPolling() {
     if (progressPollRef.current) clearInterval(progressPollRef.current)
+    let lastBackendPercent = 0
     progressPollRef.current = setInterval(async () => {
       try {
         const r = await api.get('/admin/upload/progress')
         const { stage, percent, message } = r.data
-        setProgress({ stage, percent, message })
+        // Always move forward — never go backwards
+        const effective = Math.max(percent, lastBackendPercent)
+        lastBackendPercent = effective
+        setProgress({ stage, percent: effective, message })
         if (stage === 'done' || stage === 'error') {
           clearInterval(progressPollRef.current); progressPollRef.current = null
+          stopPolling()
         }
       } catch { /* ignore */ }
-    }, 400)
+    }, 600)
   }
 
   function startTrainingPolling() {
@@ -186,11 +191,13 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
         const s = r.data.status
         setTrainingStatus(s)
         if (s === 'done') {
-          clearInterval(trainingPollRef.current); trainingPollRef.current = null
+          stopPolling()
+          setProgress({ stage: 'done', percent: 100, message: 'Upload and training complete!' })
           setResult(prev => ({ ...prev, training: { ...prev?.training, forecast: r.data.result?.forecast, models: r.data.result } }))
           onStatusRefresh()
         } else if (s === 'error') {
-          clearInterval(trainingPollRef.current); trainingPollRef.current = null
+          stopPolling()
+          setProgress({ stage: 'error', percent: 0, message: r.data.error || 'Training failed' })
           setError(`Model training failed: ${r.data.error || 'Unknown error'}`)
         }
       } catch { clearInterval(trainingPollRef.current); trainingPollRef.current = null }
@@ -272,8 +279,13 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
 
       if (data1.training_async) {
         setTrainingStatus('running')
+        // Both pollers run: progress bar + training completion
         startTrainingPolling()
+        // Progress polling already started before upload — keep it running
       } else {
+        // No async training — stop progress polling and refresh status
+        stopPolling()
+        setProgress({ stage: 'done', percent: 100, message: 'Complete!' })
         onStatusRefresh()
       }
     } catch (err) {

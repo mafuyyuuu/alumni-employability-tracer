@@ -123,22 +123,35 @@ def _run_import_and_training_background(app, db_path, file_path, safe_name,
                     pass
 
             if retrain:
-                _set_progress('training', 62, 'Retraining models…')
+                import time as _time
+                _set_progress('training', 62, 'Starting model training…')
                 with _training_lock:
                     _training_job = {'status': 'running', 'result': None, 'error': None}
+
+                # RF training — emit ticks so frontend doesn't appear stuck at 62%
+                _set_progress('training', 64, 'Training Random Forest (this may take a minute)…')
+                _time.sleep(0.5)
+                _set_progress('training', 66, 'Training Random Forest…')
                 rf_metadata = train_random_forest(database_path=db_path)
+                _set_progress('training', 80, 'Random Forest done. Training Linear Regression…')
+
+                # LR training
+                _time.sleep(0.3)
                 _set_progress('training', 82, 'Training Linear Regression…')
                 lr_metadata = train_linear_employability(database_path=db_path)
-                _set_progress('training', 93, 'Loading models…')
+                _set_progress('training', 92, 'Linear Regression done. Loading models…')
+
                 ml_predictor._load_models()
+                _set_progress('training', 95, 'Models loaded. Computing forecast…')
+
                 forecast = None
                 if dataset_year:
                     try:
-                        _set_progress('training', 96, 'Computing forecast…')
                         forecast = _auto_forecast_3yr(get_db(), dataset_year)
                     except Exception:
                         forecast = None
-                _set_progress('done', 100, 'Upload complete')
+
+                _set_progress('done', 100, 'Upload and training complete!')
                 with _training_lock:
                     _training_job = {
                         'status': 'done',
@@ -147,7 +160,7 @@ def _run_import_and_training_background(app, db_path, file_path, safe_name,
                         'error': None,
                     }
             else:
-                _set_progress('done', 100, 'Import complete')
+                _set_progress('done', 100, 'Import complete!')
                 with _training_lock:
                     _training_job = {
                         'status': 'done',
@@ -776,70 +789,78 @@ def dashboard():
     db = get_db()
     model_str = request.args.get('model', 'Linear Regression')
 
+    # Check if any real dataset has been uploaded
+    training_count = db.execute(
+        "SELECT COUNT(*) as cnt FROM ml_training_rows WHERE is_active=1"
+    ).fetchone()['cnt']
+
+    has_dataset = training_count > 0
+
     total_alumni = db.execute(
         "SELECT COUNT(*) as cnt FROM users WHERE role = 'alumni'"
     ).fetchone()['cnt']
 
-    # Exclude graduating-year alumni (still job-hunting) from the employment rate
-    latest_yr = db.execute(
-        "SELECT MAX(graduation_year) AS my FROM ml_training_rows WHERE is_active=1"
-    ).fetchone()['my']
-
-    employed_count = db.execute(
-        "SELECT COUNT(*) as cnt FROM users WHERE role='alumni' AND employed=1"
-        + (" AND graduation_year != ?" if latest_yr else ""),
-        [latest_yr] if latest_yr else []
-    ).fetchone()['cnt']
-
-    non_graduating = db.execute(
-        "SELECT COUNT(*) as cnt FROM users WHERE role='alumni'"
-        + (" AND graduation_year != ?" if latest_yr else ""),
-        [latest_yr] if latest_yr else []
-    ).fetchone()['cnt']
-
-    employment_rate = round(employed_count / non_graduating * 100, 1) if non_graduating > 0 else 0
-
-    # Historical employment data
-    _ensure_employment_data_from_training(db)
-    emp_rows = db.execute(
-        "SELECT year, overall_rate FROM employment_data ORDER BY year"
-    ).fetchall()
-
-    chart_data = [{'year': str(r['year']), 'rate': r['overall_rate']} for r in emp_rows]
-
-    # Add simple 1-year forecast
-    forecast = None
-    if chart_data:
-        rates = [r['overall_rate'] for r in emp_rows]
-        forecast = _forecast_result_for_model(rates, horizon=1, model_str=model_str)
-        next_year = str(emp_rows[-1]['year'] + 1)
-        chart_data.append({
-            'year': next_year,
-            'rate': forecast['forecast_values'][0],
-            'forecast': True,
-        })
-
-    margin_of_error = 1.1
-    if forecast:
-        mape = forecast.get('metrics', {}).get('mape')
-        if isinstance(mape, (int, float)):
-            margin_of_error = round(float(mape), 1)
-
-    # Year-over-year change from historical data
+    # Stats are only meaningful when a real dataset exists
+    employment_rate = 0
+    graduate_success = 0
     emp_change = 0.0
-    if len(emp_rows) >= 2:
-        emp_change = round(emp_rows[-1]['overall_rate'] - emp_rows[-2]['overall_rate'], 1)
+    margin_of_error = 0
+    chart_data = []
+
+    if has_dataset:
+        latest_yr = db.execute(
+            "SELECT MAX(graduation_year) AS my FROM ml_training_rows WHERE is_active=1"
+        ).fetchone()['my']
+
+        employed_count = db.execute(
+            "SELECT COUNT(*) as cnt FROM ml_training_rows WHERE is_active=1 AND employed=1"
+            + (" AND graduation_year != ?" if latest_yr else ""),
+            [latest_yr] if latest_yr else []
+        ).fetchone()['cnt']
+
+        non_graduating = db.execute(
+            "SELECT COUNT(*) as cnt FROM ml_training_rows WHERE is_active=1"
+            + (" AND graduation_year != ?" if latest_yr else ""),
+            [latest_yr] if latest_yr else []
+        ).fetchone()['cnt']
+
+        employment_rate = round(employed_count / non_graduating * 100, 1) if non_graduating > 0 else 0
+        graduate_success = round(employed_count / training_count * 100, 1) if training_count > 0 else 0
+
+        _ensure_employment_data_from_training(db)
+        emp_rows = db.execute(
+            "SELECT year, overall_rate FROM employment_data ORDER BY year"
+        ).fetchall()
+
+        chart_data = [{'year': str(r['year']), 'rate': r['overall_rate']} for r in emp_rows]
+
+        forecast = None
+        if chart_data:
+            rates = [r['overall_rate'] for r in emp_rows]
+            forecast = _forecast_result_for_model(rates, horizon=1, model_str=model_str)
+            next_year = str(emp_rows[-1]['year'] + 1)
+            chart_data.append({
+                'year': next_year,
+                'rate': forecast['forecast_values'][0],
+                'forecast': True,
+            })
+            mape = forecast.get('metrics', {}).get('mape')
+            if isinstance(mape, (int, float)):
+                margin_of_error = round(float(mape), 1)
+
+        if len(emp_rows) >= 2:
+            emp_change = round(emp_rows[-1]['overall_rate'] - emp_rows[-2]['overall_rate'], 1)
 
     return jsonify({
         'metrics': {
             'total_alumni': total_alumni,
             'employment_rate': employment_rate,
             'employment_rate_change': emp_change,
-            'graduate_success': round(employed_count / total_alumni * 100, 1) if total_alumni > 0 else 0,
-            'margin_of_error': margin_of_error if chart_data else 0,
+            'graduate_success': graduate_success,
+            'margin_of_error': margin_of_error,
         },
         'employment_data': chart_data,
-        'model_used': (forecast or {}).get('model_used', 'Linear Regression'),
+        'model_used': 'Linear Regression',
     }), 200
 
 
@@ -2803,7 +2824,7 @@ def upload_model():
         'message': 'File uploaded successfully',
         'training_policy': training_policy,
         'upload': upload,
-        'training_async': training_policy == 'uploaded_csv_imported_and_retraining_async',
+        'training_async': training_policy in ('uploaded_csv_imported_and_retraining_async', 'async_import_and_training'),
     }
     if import_result:
         response['import'] = import_result
