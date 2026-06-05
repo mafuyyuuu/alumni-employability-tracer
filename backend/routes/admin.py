@@ -2427,11 +2427,10 @@ def download_report():
     fmt = request.args.get('format', 'excel').lower()
     years_raw = request.args.getlist('years')
     programs_raw = request.args.getlist('programs')
-    factors_raw = request.args.getlist('factors')
 
     db = get_db()
 
-    # Build query
+    # Fetch alumni with prediction scores
     query = "SELECT * FROM ml_training_rows WHERE is_active=1"
     params = []
     if years_raw:
@@ -2443,175 +2442,206 @@ def download_report():
         query += f" AND UPPER(TRIM(course)) IN ({placeholders})"
         params += [p.upper().strip() for p in programs_raw]
     query += " ORDER BY graduation_year, course, name"
-
     rows = db.execute(query, params).fetchall()
 
-    # Default factors
-    all_factors = ['name', 'email', 'course', 'graduation_year', 'avg_grade',
-                   'avg_prof_grade', 'avg_elec_grade', 'ojt_grade',
-                   'soft_skills', 'hard_skills', 'board_passer', 'employed']
-    factor_labels = {
-        'name': 'Name', 'email': 'Email', 'course': 'Program',
-        'graduation_year': 'Year', 'avg_grade': 'GWA',
-        'avg_prof_grade': 'Prof Grade', 'avg_elec_grade': 'Elec Grade',
-        'ojt_grade': 'OJT Grade', 'soft_skills': 'Soft Skills',
-        'hard_skills': 'Hard Skills', 'board_passer': 'Board Passer',
-        'employed': 'Employment Status',
-    }
-    selected_factors = [f for f in all_factors if not factors_raw or f in factors_raw]
+    # Compute employability score + tier for each row
+    def _score(r):
+        gwa = float(r['avg_grade'] or 0)
+        norm = round((5.0 - gwa) / 4.0 * 100, 1) if 0 < gwa <= 5.0 else gwa
+        ojt   = float(r['ojt_grade']   or 0)
+        soft  = float(r['soft_skills'] or 0)
+        hard  = float(r['hard_skills'] or 0)
+        board = float(r['board_passer'] or 0)
+        return round(min(norm * 0.35 + ojt * 0.20 + soft * 0.15 + hard * 0.15 + board * 15, 100), 1)
+
+    def _tier(score, employed):
+        if score >= 80: return 'Likely Employable'
+        if score >= 65: return 'Employable'
+        return 'Least Employable'
+
+    enriched = []
+    for r in rows:
+        sc = _score(r)
+        tier = _tier(sc, r['employed'])
+        enriched.append({
+            'name': r['name'] or '',
+            'email': r['email'] or '',
+            'course': r['course'] or '',
+            'graduation_year': r['graduation_year'],
+            'employment_status': 'Employed' if r['employed'] else 'Unemployed',
+            'employability_score': sc,
+            'employability_tier': tier,
+            'gwa': round(float(r['avg_grade'] or 0), 2),
+            'soft_skills': round(float(r['soft_skills'] or 0), 1),
+            'hard_skills': round(float(r['hard_skills'] or 0), 1),
+            'board_passer': 'Yes' if r['board_passer'] else 'No',
+        })
 
     years_label = ', '.join(sorted(set(str(r['graduation_year']) for r in rows))) or 'All Years'
 
     if fmt == 'excel':
         import openpyxl
-        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.styles import Font, PatternFill, Alignment
         from openpyxl.utils import get_column_letter
+        from collections import defaultdict
 
         wb = openpyxl.Workbook()
+        hdr_fill = PatternFill('solid', fgColor='163D22')
+        hdr_font = Font(bold=True, color='FFFFFF', size=10)
+        tot_fill = PatternFill('solid', fgColor='E6EDE8')
+        tot_font = Font(bold=True, color='163D22', size=10)
+        center  = Alignment(horizontal='center')
 
-        # ── Sheet 1: Summary ─────────────────────────────────────────────
-        ws_sum = wb.active
-        ws_sum.title = 'Summary'
-        header_fill = PatternFill('solid', fgColor='163D22')
-        header_font = Font(bold=True, color='FFFFFF', size=11)
-        sub_fill = PatternFill('solid', fgColor='E6EDE8')
-        sub_font = Font(bold=True, color='163D22', size=10)
+        # ── Sheet 1: Summary by Year & Program ───────────────────────────
+        ws1 = wb.active
+        ws1.title = 'Summary'
+        ws1['A1'] = 'PLP Alumni Employability Prediction Report'
+        ws1['A1'].font = Font(bold=True, size=14, color='163D22')
+        ws1['A2'] = f'Years: {years_label}   |   Generated: {datetime.now().strftime("%Y-%m-%d %H:%M")}'
+        ws1['A2'].font = Font(size=10, color='666666')
+        ws1.append([])
 
-        ws_sum['A1'] = 'PLP Alumni Employability Report'
-        ws_sum['A1'].font = Font(bold=True, size=14, color='163D22')
-        ws_sum['A2'] = f'Years: {years_label}'
-        ws_sum['A2'].font = Font(size=10, color='666666')
-        ws_sum['A3'] = f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M")}'
-        ws_sum['A3'].font = Font(size=10, color='666666')
-        ws_sum.append([])
+        heads = ['Year', 'Program', 'Total', 'Likely Employable', 'Employable', 'Least Employable', 'Employed', 'Unemployed', 'Employment Rate']
+        ws1.append(heads)
+        for c, h in enumerate(heads, 1):
+            cell = ws1.cell(row=4, column=c)
+            cell.fill = hdr_fill; cell.font = hdr_font; cell.alignment = center
 
-        sum_headers = ['Year', 'Program', 'Total', 'Employed', 'Unemployed', 'Employment Rate']
-        ws_sum.append(sum_headers)
-        for col, h in enumerate(sum_headers, 1):
-            cell = ws_sum.cell(row=5, column=col)
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = Alignment(horizontal='center')
-
-        # Aggregate
-        from collections import defaultdict
-        agg = defaultdict(lambda: {'total': 0, 'employed': 0})
-        for r in rows:
-            key = (r['graduation_year'], r['course'])
+        agg = defaultdict(lambda: {'total':0,'likely':0,'emp':0,'least':0,'employed':0})
+        for e in enriched:
+            key = (e['graduation_year'], e['course'])
             agg[key]['total'] += 1
-            if r['employed']:
-                agg[key]['employed'] += 1
+            if e['employability_tier'] == 'Likely Employable': agg[key]['likely'] += 1
+            elif e['employability_tier'] == 'Employable': agg[key]['emp'] += 1
+            else: agg[key]['least'] += 1
+            if e['employment_status'] == 'Employed': agg[key]['employed'] += 1
 
-        row_num = 6
-        for (yr, prog), counts in sorted(agg.items()):
-            total = counts['total']
-            emp = counts['employed']
-            rate = f"{round(emp/total*100,1)}%" if total > 0 else '0%'
-            ws_sum.append([yr, prog, total, emp, total - emp, rate])
-            for col in range(1, 7):
-                cell = ws_sum.cell(row=row_num, column=col)
-                cell.alignment = Alignment(horizontal='center')
-            row_num += 1
+        rn = 5
+        for (yr, prog), v in sorted(agg.items()):
+            t = v['total']; em = v['employed']
+            rate = f"{round(em/t*100,1)}%" if t else '0%'
+            unemp = t - em
+            ws1.append([yr, prog, t, v['likely'], v['emp'], v['least'], em, unemp, rate])
+            for c in range(1, 10): ws1.cell(row=rn, column=c).alignment = center
+            rn += 1
 
-        # Totals row
-        total_all = len(rows)
-        emp_all = sum(1 for r in rows if r['employed'])
-        ws_sum.append(['TOTAL', 'All Programs', total_all, emp_all, total_all - emp_all,
-                       f"{round(emp_all/total_all*100,1)}%" if total_all > 0 else '0%'])
-        for col in range(1, 7):
-            cell = ws_sum.cell(row=row_num, column=col)
-            cell.fill = sub_fill
-            cell.font = sub_font
-            cell.alignment = Alignment(horizontal='center')
+        tot = len(enriched)
+        tot_emp = sum(1 for e in enriched if e['employment_status'] == 'Employed')
+        tot_likely = sum(1 for e in enriched if e['employability_tier'] == 'Likely Employable')
+        tot_employable = sum(1 for e in enriched if e['employability_tier'] == 'Employable')
+        tot_least = sum(1 for e in enriched if e['employability_tier'] == 'Least Employable')
+        ws1.append(['TOTAL', 'All', tot, tot_likely, tot_employable, tot_least, tot_emp, tot-tot_emp,
+                    f"{round(tot_emp/tot*100,1)}%" if tot else '0%'])
+        for c in range(1, 10):
+            cell = ws1.cell(row=rn, column=c)
+            cell.fill = tot_fill; cell.font = tot_font; cell.alignment = center
 
-        for col in range(1, 7):
-            ws_sum.column_dimensions[get_column_letter(col)].width = 18
+        col_widths = [8, 12, 8, 16, 12, 16, 10, 12, 16]
+        for i, w in enumerate(col_widths, 1):
+            ws1.column_dimensions[get_column_letter(i)].width = w
 
-        # ── Sheet 2: Alumni Detail ────────────────────────────────────────
-        ws_det = wb.create_sheet('Alumni Data')
-        headers = [factor_labels.get(f, f) for f in selected_factors]
-        ws_det.append(headers)
-        for col, h in enumerate(headers, 1):
-            cell = ws_det.cell(row=1, column=col)
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = Alignment(horizontal='center')
+        # ── Sheet 2: Alumni with Predictions ─────────────────────────────
+        ws2 = wb.create_sheet('Alumni Predictions')
+        det_heads = ['Name', 'Email', 'Program', 'Year', 'Score', 'Employability Tier',
+                     'Employment Status', 'GWA', 'Soft Skills', 'Hard Skills', 'Board Passer']
+        ws2.append(det_heads)
+        for c, h in enumerate(det_heads, 1):
+            cell = ws2.cell(row=1, column=c)
+            cell.fill = hdr_fill; cell.font = hdr_font; cell.alignment = center
 
-        for r in rows:
-            row_data = []
-            for f in selected_factors:
-                val = r[f] if f in r.keys() else ''
-                if f == 'employed':
-                    val = 'Employed' if val else 'Unemployed'
-                elif f == 'board_passer':
-                    val = 'Yes' if val else 'No'
-                row_data.append(val)
-            ws_det.append(row_data)
+        tier_colors = {'Likely Employable': 'D1FAE5', 'Employable': 'DBEAFE', 'Least Employable': 'FEE2E2'}
+        for i, e in enumerate(enriched, 2):
+            row = [e['name'], e['email'], e['course'], e['graduation_year'],
+                   e['employability_score'], e['employability_tier'], e['employment_status'],
+                   e['gwa'], e['soft_skills'], e['hard_skills'], e['board_passer']]
+            ws2.append(row)
+            tier_fill = PatternFill('solid', fgColor=tier_colors.get(e['employability_tier'], 'FFFFFF'))
+            ws2.cell(row=i, column=6).fill = tier_fill
 
-        for col in range(1, len(selected_factors) + 1):
-            ws_det.column_dimensions[get_column_letter(col)].width = 16
+        det_widths = [22, 26, 10, 8, 8, 18, 18, 8, 12, 12, 14]
+        for i, w in enumerate(det_widths, 1):
+            ws2.column_dimensions[get_column_letter(i)].width = w
 
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
-
         resp = make_response(output.read())
         resp.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        resp.headers['Content-Disposition'] = f'attachment; filename=PLP_Report_{years_label.replace(", ","_")}.xlsx'
+        resp.headers['Content-Disposition'] = f'attachment; filename=PLP_Employability_Report_{years_label.replace(", ","_")}.xlsx'
         return resp
 
-    else:  # PDF via HTML
-        emp_count = sum(1 for r in rows if r['employed'])
-        unemp_count = len(rows) - emp_count
-        emp_rate = round(emp_count / len(rows) * 100, 1) if rows else 0
-
+    else:  # PDF via printable HTML
         from collections import defaultdict
-        agg = defaultdict(lambda: {'total': 0, 'employed': 0})
-        for r in rows:
-            key = (r['graduation_year'], r['course'])
+        tot = len(enriched)
+        tot_emp = sum(1 for e in enriched if e['employment_status'] == 'Employed')
+        tot_likely = sum(1 for e in enriched if e['employability_tier'] == 'Likely Employable')
+        tot_employable = sum(1 for e in enriched if e['employability_tier'] == 'Employable')
+        tot_least = sum(1 for e in enriched if e['employability_tier'] == 'Least Employable')
+        emp_rate = round(tot_emp / tot * 100, 1) if tot else 0
+
+        agg = defaultdict(lambda: {'total':0,'likely':0,'emp':0,'least':0,'employed':0})
+        for e in enriched:
+            key = (e['graduation_year'], e['course'])
             agg[key]['total'] += 1
-            if r['employed']:
-                agg[key]['employed'] += 1
+            if e['employability_tier'] == 'Likely Employable': agg[key]['likely'] += 1
+            elif e['employability_tier'] == 'Employable': agg[key]['emp'] += 1
+            else: agg[key]['least'] += 1
+            if e['employment_status'] == 'Employed': agg[key]['employed'] += 1
 
         summary_rows = ''
-        for (yr, prog), counts in sorted(agg.items()):
-            t = counts['total']
-            e = counts['employed']
-            rate = f"{round(e/t*100,1)}%" if t > 0 else '0%'
-            summary_rows += f'<tr><td>{yr}</td><td>{prog}</td><td>{t}</td><td>{e}</td><td>{t-e}</td><td>{rate}</td></tr>'
+        for (yr, prog), v in sorted(agg.items()):
+            t = v['total']; em = v['employed']
+            rate = f"{round(em/t*100,1)}%" if t else '0%'
+            summary_rows += f'<tr><td>{yr}</td><td>{prog}</td><td>{t}</td><td class="likely">{v["likely"]}</td><td class="emp">{v["emp"]}</td><td class="least">{v["least"]}</td><td>{em}</td><td>{t-em}</td><td>{rate}</td></tr>'
+
+        tier_badge = {'Likely Employable':'#15803d','Employable':'#1d4ed8','Least Employable':'#b91c1c'}
+        tier_bg    = {'Likely Employable':'#dcfce7','Employable':'#dbeafe','Least Employable':'#fee2e2'}
+
+        detail_rows = ''.join(
+            f'<tr><td>{e["name"]}</td><td>{e["course"]}</td><td>{e["graduation_year"]}</td>'
+            f'<td>{e["gwa"]}</td><td>{e["soft_skills"]}</td><td>{e["hard_skills"]}</td>'
+            f'<td>{e["employability_score"]}</td>'
+            f'<td><span style="background:{tier_bg.get(e["employability_tier"],"#f3f4f6")};color:{tier_badge.get(e["employability_tier"],"#333")};padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">{e["employability_tier"]}</span></td>'
+            f'<td>{e["employment_status"]}</td></tr>'
+            for e in enriched[:500]  # limit to 500 rows for PDF readability
+        )
 
         html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
-<title>PLP Employment Report</title>
+<title>PLP Employability Report</title>
 <style>
-  body{{font-family:Arial,sans-serif;margin:30px;color:#1a1a1a}}
-  h1{{color:#163d22;font-size:22px;margin-bottom:4px}}
-  .sub{{color:#666;font-size:12px;margin-bottom:20px}}
-  .stats{{display:flex;gap:16px;margin:20px 0}}
-  .stat{{background:#e6ede8;border-radius:10px;padding:14px 22px;text-align:center}}
-  .stat-val{{font-size:26px;font-weight:900;color:#163d22}}
-  .stat-lbl{{font-size:11px;color:#666;margin-top:2px}}
-  table{{width:100%;border-collapse:collapse;font-size:12px;margin-top:16px}}
-  th{{background:#163d22;color:#fff;padding:8px 10px;text-align:left}}
-  td{{padding:7px 10px;border-bottom:1px solid #e5e7eb}}
-  tr:nth-child(even) td{{background:#f9fafb}}
-  .total-row td{{background:#e6ede8;font-weight:bold}}
-  @media print{{body{{margin:10px}}button{{display:none}}}}
-</style>
-</head><body>
-<button onclick="window.print()" style="float:right;padding:8px 18px;background:#163d22;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px">Print / Save PDF</button>
-<h1>PLP Alumni Employability Report</h1>
-<div class="sub">Years: {years_label} &nbsp;|&nbsp; Generated: {datetime.now().strftime('%B %d, %Y %H:%M')}</div>
+  body{{font-family:Arial,sans-serif;margin:24px;color:#111}}
+  h1{{color:#163d22;font-size:20px;margin:0 0 4px}}
+  .sub{{color:#666;font-size:11px;margin-bottom:16px}}
+  .stats{{display:flex;gap:12px;margin:16px 0;flex-wrap:wrap}}
+  .stat{{background:#e6ede8;border-radius:8px;padding:10px 16px;text-align:center;min-width:90px}}
+  .stat-val{{font-size:22px;font-weight:900;color:#163d22}}
+  .stat-lbl{{font-size:10px;color:#555;margin-top:1px}}
+  .likely{{color:#15803d;font-weight:700}} .emp{{color:#1d4ed8;font-weight:700}} .least{{color:#b91c1c;font-weight:700}}
+  h2{{font-size:13px;color:#163d22;margin:20px 0 8px;border-bottom:2px solid #e6ede8;padding-bottom:4px}}
+  table{{width:100%;border-collapse:collapse;font-size:11px}}
+  th{{background:#163d22;color:#fff;padding:6px 8px;text-align:left}}
+  td{{padding:5px 8px;border-bottom:1px solid #f0f0f0}}
+  tr:nth-child(even) td{{background:#fafafa}}
+  .total-row td{{background:#e6ede8;font-weight:700}}
+  @media print{{button{{display:none}}}}
+</style></head><body>
+<button onclick="window.print()" style="float:right;padding:6px 14px;background:#163d22;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px">🖨 Print / Save PDF</button>
+<h1>PLP Alumni Employability Prediction Report</h1>
+<div class="sub">Years: {years_label} &nbsp;|&nbsp; Generated: {datetime.now().strftime('%B %d, %Y')}</div>
 <div class="stats">
-  <div class="stat"><div class="stat-val">{len(rows):,}</div><div class="stat-lbl">Total Alumni</div></div>
-  <div class="stat"><div class="stat-val">{emp_count:,}</div><div class="stat-lbl">Employed</div></div>
-  <div class="stat"><div class="stat-val">{unemp_count:,}</div><div class="stat-lbl">Unemployed</div></div>
+  <div class="stat"><div class="stat-val">{tot:,}</div><div class="stat-lbl">Total Alumni</div></div>
+  <div class="stat"><div class="stat-val likely">{tot_likely:,}</div><div class="stat-lbl">Likely Employable</div></div>
+  <div class="stat"><div class="stat-val emp">{tot_employable:,}</div><div class="stat-lbl">Employable</div></div>
+  <div class="stat"><div class="stat-val least">{tot_least:,}</div><div class="stat-lbl">Least Employable</div></div>
   <div class="stat"><div class="stat-val">{emp_rate}%</div><div class="stat-lbl">Employment Rate</div></div>
 </div>
-<table>
-<tr><th>Year</th><th>Program</th><th>Total</th><th>Employed</th><th>Unemployed</th><th>Rate</th></tr>
+<h2>Summary by Year & Program</h2>
+<table><tr><th>Year</th><th>Program</th><th>Total</th><th>Likely</th><th>Employable</th><th>Least</th><th>Employed</th><th>Unemployed</th><th>Rate</th></tr>
 {summary_rows}
-<tr class="total-row"><td colspan="2">TOTAL</td><td>{len(rows):,}</td><td>{emp_count:,}</td><td>{unemp_count:,}</td><td>{emp_rate}%</td></tr>
-</table>
+<tr class="total-row"><td colspan="2">TOTAL</td><td>{tot:,}</td><td class="likely">{tot_likely}</td><td class="emp">{tot_employable}</td><td class="least">{tot_least}</td><td>{tot_emp}</td><td>{tot-tot_emp}</td><td>{emp_rate}%</td></tr></table>
+<h2>Alumni Predictions{' (first 500 shown)' if len(enriched) > 500 else ''}</h2>
+<table><tr><th>Name</th><th>Program</th><th>Year</th><th>GWA</th><th>Soft</th><th>Hard</th><th>Score</th><th>Tier</th><th>Status</th></tr>
+{detail_rows}</table>
 </body></html>"""
 
         resp = make_response(html)

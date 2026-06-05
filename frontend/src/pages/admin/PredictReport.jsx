@@ -1,22 +1,7 @@
 import { useState, useEffect } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout'
-import { MdPictureAsPdf, MdTableChart, MdDownload, MdFilterList } from 'react-icons/md'
+import { MdPictureAsPdf, MdTableChart, MdDownload } from 'react-icons/md'
 import api from '../../services/api'
-
-const ALL_FACTORS = [
-  { key: 'name',          label: 'Name' },
-  { key: 'email',         label: 'Email' },
-  { key: 'course',        label: 'Program' },
-  { key: 'graduation_year', label: 'Year' },
-  { key: 'avg_grade',     label: 'GWA' },
-  { key: 'avg_prof_grade',label: 'Prof Grade' },
-  { key: 'avg_elec_grade',label: 'Elec Grade' },
-  { key: 'ojt_grade',     label: 'OJT Grade' },
-  { key: 'soft_skills',   label: 'Soft Skills' },
-  { key: 'hard_skills',   label: 'Hard Skills' },
-  { key: 'board_passer',  label: 'Board Passer' },
-  { key: 'employed',      label: 'Employment Status' },
-]
 
 function CheckPill({ label, checked, onChange }) {
   return (
@@ -40,7 +25,6 @@ export default function PredictReport() {
   const [availablePrograms, setAvailablePrograms] = useState([])
   const [selectedYears, setSelectedYears] = useState([])
   const [selectedPrograms, setSelectedPrograms] = useState([])
-  const [selectedFactors, setSelectedFactors] = useState(ALL_FACTORS.map(f => f.key))
   const [downloading, setDownloading] = useState(false)
   const [rowCount, setRowCount] = useState(null)
 
@@ -77,10 +61,6 @@ export default function PredictReport() {
   function toggleProgram(p) {
     setSelectedPrograms(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])
   }
-  function toggleFactor(k) {
-    setSelectedFactors(prev => prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k])
-  }
-
   async function download() {
     if (selectedYears.length === 0) { alert('Select at least one year.'); return }
     setDownloading(true)
@@ -89,7 +69,6 @@ export default function PredictReport() {
       params.append('format', format)
       selectedYears.forEach(y => params.append('years', y))
       selectedPrograms.forEach(p => params.append('programs', p))
-      selectedFactors.forEach(f => params.append('factors', f))
 
       const token = localStorage.getItem('token')
       const base = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api'
@@ -200,26 +179,18 @@ export default function PredictReport() {
               </div>
             </div>
 
-            {/* Factors/columns */}
+            {/* Report includes note */}
             <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-bold" style={{ color: '#0f2d1a' }}>
-                  <MdFilterList className="inline mr-1" />
-                  Columns to Include <span className="text-gray-400 font-normal">({selectedFactors.length} selected)</span>
-                </p>
-                <div className="flex gap-2">
-                  <button onClick={() => setSelectedFactors(ALL_FACTORS.map(f => f.key))}
-                    className="text-[11px] font-semibold" style={{ color: '#0f2d1a' }}>All</button>
-                  <span className="text-gray-300">|</span>
-                  <button onClick={() => setSelectedFactors(['name', 'course', 'graduation_year', 'employed'])}
-                    className="text-[11px] font-semibold text-gray-400">Basic</button>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {ALL_FACTORS.map(f => (
-                  <CheckPill key={f.key} label={f.label}
-                    checked={selectedFactors.includes(f.key)}
-                    onChange={() => toggleFactor(f.key)} />
+              <p className="text-xs font-bold mb-2" style={{ color: '#0f2d1a' }}>Report Contents</p>
+              <div className="space-y-1.5">
+                {['Summary by Year & Program (totals, tiers, employment rate)',
+                  'Per-alumni: Name, Program, Year, GWA, Soft/Hard Skills',
+                  'Employability Score & Tier (Likely / Employable / Least)',
+                  'Employment Status'].map(item => (
+                  <div key={item} className="flex items-center gap-2 text-xs text-gray-600">
+                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#0f2d1a' }} />
+                    {item}
+                  </div>
                 ))}
               </div>
             </div>
@@ -250,10 +221,6 @@ export default function PredictReport() {
                      selectedPrograms.length === availablePrograms.length ? 'All' :
                      `${selectedPrograms.length} selected`}
                   </span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">Columns</span>
-                  <span className="font-semibold text-gray-800">{selectedFactors.length} of {ALL_FACTORS.length}</span>
                 </div>
                 <div className="flex justify-between text-xs border-t border-gray-100 pt-3">
                   <span className="text-gray-500">Est. Rows</span>
