@@ -796,7 +796,8 @@ def dashboard():
 
     has_dataset = training_count > 0
 
-    total_alumni = db.execute(
+    # Total alumni = from dataset when available, else registered users
+    total_alumni = training_count if has_dataset else db.execute(
         "SELECT COUNT(*) as cnt FROM users WHERE role = 'alumni'"
     ).fetchone()['cnt']
 
@@ -825,7 +826,17 @@ def dashboard():
         ).fetchone()['cnt']
 
         employment_rate = round(employed_count / non_graduating * 100, 1) if non_graduating > 0 else 0
-        graduate_success = round(employed_count / training_count * 100, 1) if training_count > 0 else 0
+
+        # Graduate success = employment rate of the latest uploaded year's cohort
+        latest_yr_total = db.execute(
+            "SELECT COUNT(*) as cnt FROM ml_training_rows WHERE is_active=1 AND graduation_year=?",
+            [latest_yr]
+        ).fetchone()['cnt'] if latest_yr else 0
+        latest_yr_employed = db.execute(
+            "SELECT COUNT(*) as cnt FROM ml_training_rows WHERE is_active=1 AND employed=1 AND graduation_year=?",
+            [latest_yr]
+        ).fetchone()['cnt'] if latest_yr else 0
+        graduate_success = round(latest_yr_employed / latest_yr_total * 100, 1) if latest_yr_total > 0 else 0
 
         _ensure_employment_data_from_training(db)
         emp_rows = db.execute(
