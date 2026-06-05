@@ -82,55 +82,58 @@ export default function AdminDashboard() {
         </div>
 
         {/* Metrics */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           {metricCards.map((m) => {
             const Icon = m.icon
             return (
-              <div key={m.label} className="bg-white rounded-2xl p-5 flex items-center gap-3" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)', minHeight: '90px' }}>
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: m.bg }}>
-                  <Icon className="text-lg" style={{ color: m.color }} />
+              <div key={m.label} className="bg-white rounded-2xl p-4 flex items-center gap-3" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: m.bg }}>
+                  <Icon className="text-base" style={{ color: m.color }} />
                 </div>
-                <div>
-                  <p className="text-xs text-gray-400 mb-0.5">{m.label}</p>
-                  <p className="text-2xl font-black leading-none" style={{ color: m.color }}>{m.value}</p>
-                  <p className="text-xs text-gray-400 mt-1">{m.sub}</p>
+                <div className="min-w-0">
+                  <p className="text-xs text-gray-400 mb-0.5 truncate">{m.label}</p>
+                  <p className="text-xl font-black leading-none" style={{ color: m.color }}>{m.value}</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5 truncate">{m.sub}</p>
                 </div>
               </div>
             )
           })}
 
-          {/* Employability Prediction card */}
-          <div className="bg-white rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all"
-            style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)', minHeight: '90px' }}
+          {/* Employability Prediction card — spans 2 cols to fill the gap left by removed card */}
+          <div className="bg-white rounded-2xl p-4 cursor-pointer hover:shadow-md transition-all col-span-2"
+            style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}
             onClick={() => navigate('/admin/predict')}>
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#e6ede8' }}>
-                <MdWorkOutline className="text-lg" style={{ color: '#0f2d1a' }} />
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#e6ede8' }}>
+                  <MdWorkOutline className="text-base" style={{ color: '#0f2d1a' }} />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">Employability Prediction</p>
+                  <p className="text-xs font-semibold" style={{ color: '#0f2d1a' }}>
+                    {predictYear ? `Batch ${predictYear} · Latest` : 'Latest Batch'}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-gray-400">Employability Prediction</p>
-                <p className="text-xs font-semibold" style={{ color: '#0f2d1a' }}>
-                  {predictYear ? `Batch ${predictYear}` : 'Latest Batch'}
-                </p>
-              </div>
+              <span className="text-[10px] text-gray-400 hidden sm:block">Click to view →</span>
             </div>
             {predictSummary ? (
-              <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-xl p-2 text-center" style={{ background: '#dcfce7' }}>
-                  <p className="text-xl font-black" style={{ color: '#15803d' }}>{predictSummary.high ?? 0}</p>
-                  <p className="text-[10px] font-bold text-green-700">Likely</p>
+              <div className="grid grid-cols-3 gap-2 mt-1">
+                <div className="rounded-xl p-2.5 text-center" style={{ background: '#dcfce7' }}>
+                  <p className="text-2xl font-black" style={{ color: '#15803d' }}>{predictSummary.high ?? 0}</p>
+                  <p className="text-[10px] font-bold text-green-700">Likely Employable</p>
                 </div>
-                <div className="rounded-xl p-2 text-center" style={{ background: '#dbeafe' }}>
-                  <p className="text-xl font-black" style={{ color: '#1d4ed8' }}>{predictSummary.employable ?? 0}</p>
+                <div className="rounded-xl p-2.5 text-center" style={{ background: '#dbeafe' }}>
+                  <p className="text-2xl font-black" style={{ color: '#1d4ed8' }}>{predictSummary.employable ?? 0}</p>
                   <p className="text-[10px] font-bold text-blue-700">Employable</p>
                 </div>
-                <div className="rounded-xl p-2 text-center" style={{ background: '#fee2e2' }}>
-                  <p className="text-xl font-black" style={{ color: '#b91c1c' }}>{predictSummary.least ?? 0}</p>
-                  <p className="text-[10px] font-bold text-red-700">Least</p>
+                <div className="rounded-xl p-2.5 text-center" style={{ background: '#fee2e2' }}>
+                  <p className="text-2xl font-black" style={{ color: '#b91c1c' }}>{predictSummary.least ?? 0}</p>
+                  <p className="text-[10px] font-bold text-red-700">Least Employable</p>
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-gray-400 text-center py-1">No prediction data</p>
+              <p className="text-xs text-gray-400 text-center py-3">No prediction data yet</p>
             )}
           </div>
         </div>
