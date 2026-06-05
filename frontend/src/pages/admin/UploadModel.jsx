@@ -246,6 +246,8 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
       fd.append('apply_to_training', String(applyToTraining))
       fd.append('retrain_after_import', String(applyToTraining && retrainAfter))
       fd.append('dataset_year', String(datasetYear))
+      fd.append('create_accounts', String(createAccounts && applyToTraining))
+      fd.append('skip_email', String(skipEmail))
       if (conflictMode) fd.append('conflict_mode', conflictMode)
 
       let data1
@@ -262,18 +264,8 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
       onUploaded(data1.upload)
       setConflict(null)
 
-      // Step 2: create alumni accounts from the same file
-      let accountResult = null
-      if (createAccounts && applyToTraining) {
-        const fd2 = new FormData()
-        fd2.append('file', file)
-        fd2.append('dataset_year', String(datasetYear))
-        fd2.append('skip_email', String(skipEmail))
-        const res2 = await api.post('/admin/users/bulk-import', fd2)
-        accountResult = res2.data
-      }
-
-      setResult({ training: data1, accounts: accountResult })
+      // Account creation is handled inside the background thread to avoid DB lock
+      setResult({ training: data1, accounts: null })
       setDone(true)
       if (applyToTraining) onYearsRefresh()
 
