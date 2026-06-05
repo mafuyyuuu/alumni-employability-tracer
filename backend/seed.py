@@ -147,9 +147,11 @@ def seed():
             c.execute("""
                 INSERT INTO users (first_name, last_name, course, email, password_hash,
                     role, account_status, graduation_year, age, employed, ncae_completed,
-                    soft_skills, hard_skills, avg_grade, board_passer)
-                VALUES (?,?,?,?,?,'alumni','Active',?,?,1,1,75,75,85,0)
+                    soft_skills, hard_skills, avg_grade, board_passer, is_test_account)
+                VALUES (?,?,?,?,?,'alumni','Active',?,?,1,1,75,75,85,0,1)
             """, (first, last, course, email, hash_pw('pass123'), yr, age))
+        else:
+            c.execute("UPDATE users SET is_test_account=1 WHERE email=?", [email])
 
     # ── Fill pending skills from ml_training_rows averages ───────────────
     # For alumni who haven't completed NCAE and have no skills data,

@@ -797,9 +797,9 @@ def dashboard():
 
     has_dataset = training_count > 0
 
-    # Total alumni = from dataset when available, else registered users
+    # Total alumni = from dataset when available, else registered users (exclude test accounts)
     total_alumni = training_count if has_dataset else db.execute(
-        "SELECT COUNT(*) as cnt FROM users WHERE role = 'alumni'"
+        "SELECT COUNT(*) as cnt FROM users WHERE role = 'alumni' AND (is_test_account = 0 OR is_test_account IS NULL)"
     ).fetchone()['cnt']
 
     # Stats are only meaningful when a real dataset exists
@@ -902,8 +902,10 @@ def list_users():
         "SELECT DISTINCT course FROM ml_training_rows WHERE is_active=1 AND course IS NOT NULL ORDER BY course"
     ).fetchall()]
 
-    # 1. Fetch registered alumni
-    reg_rows = db.execute("SELECT * FROM users WHERE role = 'alumni'").fetchall()
+    # 1. Fetch registered alumni (exclude test accounts)
+    reg_rows = db.execute(
+        "SELECT * FROM users WHERE role = 'alumni' AND (is_test_account = 0 OR is_test_account IS NULL)"
+    ).fetchall()
     reg_emails = {r['email'].lower() for r in reg_rows if r['email']}
 
     # 2. Fetch dataset rows not already registered

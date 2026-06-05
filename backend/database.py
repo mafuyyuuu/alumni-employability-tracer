@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS users (
     employer_name TEXT DEFAULT '',
     employment_type TEXT DEFAULT '',
     ncae_completed INTEGER DEFAULT 0,
+    is_test_account INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -276,6 +277,7 @@ def init_db():
         "ALTER TABLE users ADD COLUMN work_position TEXT DEFAULT ''",
         "ALTER TABLE users ADD COLUMN employer_name TEXT DEFAULT ''",
         "ALTER TABLE users ADD COLUMN employment_type TEXT DEFAULT ''",
+        "ALTER TABLE users ADD COLUMN is_test_account INTEGER DEFAULT 0",
         """CREATE TABLE IF NOT EXISTS job_applications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
