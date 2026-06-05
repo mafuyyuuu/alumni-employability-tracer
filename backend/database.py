@@ -28,6 +28,10 @@ CREATE TABLE IF NOT EXISTS users (
     board_exam_score REAL DEFAULT 0,
     company_id INTEGER DEFAULT NULL,
     months_to_employment INTEGER DEFAULT NULL,
+    work_position TEXT DEFAULT '',
+    employer_name TEXT DEFAULT '',
+    employment_type TEXT DEFAULT '',
+    ncae_completed INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -269,6 +273,9 @@ def init_db():
         "ALTER TABLE users ADD COLUMN ncae_completed INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN months_to_employment INTEGER DEFAULT NULL",
         "ALTER TABLE ml_training_rows ADD COLUMN months_to_employment INTEGER DEFAULT NULL",
+        "ALTER TABLE users ADD COLUMN work_position TEXT DEFAULT ''",
+        "ALTER TABLE users ADD COLUMN employer_name TEXT DEFAULT ''",
+        "ALTER TABLE users ADD COLUMN employment_type TEXT DEFAULT ''",
         """CREATE TABLE IF NOT EXISTS job_applications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,

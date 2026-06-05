@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AlumniLayout from '../../components/alumni/AlumniLayout'
-import { MdPerson, MdSchool } from 'react-icons/md'
+import { MdPerson, MdSchool, MdWork } from 'react-icons/md'
 import api from '../../services/api'
 
 export default function ProfileSettings() {
@@ -12,6 +12,7 @@ export default function ProfileSettings() {
     degree: '', avgGrade: '', avgProfGrade: '',
     avgElecGrade: '', ojtGrade: '', softSkills: '', hardSkills: '',
     monthsToEmployment: '',
+    employed: false, workPosition: '', employerName: '', employmentType: '',
   })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -28,6 +29,10 @@ export default function ProfileSettings() {
         avgProfGrade: p.avgProfGrade || '', avgElecGrade: p.avgElecGrade || '',
         ojtGrade: p.ojtGrade || '', softSkills: p.softSkills || '', hardSkills: p.hardSkills || '',
         monthsToEmployment: p.monthsToEmployment != null ? String(p.monthsToEmployment) : '',
+        employed: p.employed || false,
+        workPosition: p.workPosition || '',
+        employerName: p.employerName || '',
+        employmentType: p.employmentType || '',
       })
     }).catch(() => {})
 
@@ -145,6 +150,74 @@ export default function ProfileSettings() {
               <p className="text-xs text-gray-400 mt-1">How many months after graduation did you find your first job?</p>
             </div>
           </div>
+
+          <div className="border-t border-gray-100 mb-6" />
+
+          {/* Employment Tracker */}
+          <div className="flex items-center gap-2 mb-5">
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: '#e6ede8' }}>
+              <MdWork className="text-sm" style={{ color: '#0f2d1a' }} />
+            </div>
+            <h2 className="text-sm font-bold text-gray-900">Employment Tracker</h2>
+          </div>
+
+          {/* Employment Status toggle */}
+          <div className="mb-4">
+            <label className={label} style={{ color: '#0f2d1a' }}>Employment Status</label>
+            <div className="flex gap-2">
+              {['Employed', 'Unemployed'].map(s => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, employed: s === 'Employed' }))}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-bold border transition-all"
+                  style={
+                    (s === 'Employed' && form.employed) || (s === 'Unemployed' && !form.employed)
+                      ? { background: '#0f2d1a', color: '#fff', borderColor: '#0f2d1a' }
+                      : { color: '#6b7280', borderColor: '#e5e7eb', background: '#fff' }
+                  }>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {form.employed && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8 p-4 rounded-xl" style={{ background: '#f9fafb' }}>
+              <div>
+                <label className={label} style={{ color: '#0f2d1a' }}>Job Title / Position</label>
+                <input
+                  name="workPosition"
+                  value={form.workPosition}
+                  onChange={handleChange}
+                  placeholder="e.g. Software Engineer"
+                  className={input}
+                />
+              </div>
+              <div>
+                <label className={label} style={{ color: '#0f2d1a' }}>Company / Employer</label>
+                <input
+                  name="employerName"
+                  value={form.employerName}
+                  onChange={handleChange}
+                  placeholder="e.g. Accenture PH"
+                  className={input}
+                />
+              </div>
+              <div>
+                <label className={label} style={{ color: '#0f2d1a' }}>Employment Type</label>
+                <select name="employmentType" value={form.employmentType} onChange={handleChange} className={input}>
+                  <option value="">Select type</option>
+                  <option value="Full-time">Full-time</option>
+                  <option value="Part-time">Part-time</option>
+                  <option value="Contract">Contract</option>
+                  <option value="Freelance">Freelance</option>
+                  <option value="Self-employed">Self-employed</option>
+                  <option value="Internship">Internship</option>
+                </select>
+              </div>
+            </div>
+          )}
 
           <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
             <button

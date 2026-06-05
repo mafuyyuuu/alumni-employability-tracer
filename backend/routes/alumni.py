@@ -36,6 +36,10 @@ def get_profile():
             'boardExamScore': float(user['board_exam_score']) if 'board_exam_score' in keys else 0.0,
             'ncaeCompleted': bool(user['ncae_completed']) if 'ncae_completed' in keys else False,
             'monthsToEmployment': user['months_to_employment'] if 'months_to_employment' in keys else None,
+            'employed': bool(user['employed']) if 'employed' in keys else False,
+            'workPosition': user['work_position'] if 'work_position' in keys else '',
+            'employerName': user['employer_name'] if 'employer_name' in keys else '',
+            'employmentType': user['employment_type'] if 'employment_type' in keys else '',
         }
     }), 200
 
@@ -54,22 +58,32 @@ def update_profile():
         except (ValueError, TypeError):
             months = None
 
+    employed_val = data.get('employed')
+    if employed_val is None:
+        employed_int = None
+    else:
+        employed_int = 1 if str(employed_val).lower() in ('true', '1', 'yes', 'employed') else 0
+
     db.execute("""
         UPDATE users SET
             first_name = ?, middle_name = ?, last_name = ?,
             age = ?, course = ?,
             avg_grade = ?, avg_prof_grade = ?, avg_elec_grade = ?,
             ojt_grade = ?, soft_skills = ?, hard_skills = ?,
-            months_to_employment = ?
+            months_to_employment = ?,
+            work_position = ?, employer_name = ?, employment_type = ?
+            {employed_clause}
         WHERE id = ?
-    """, [
+    """.format(
+        employed_clause=', employed = ?' if employed_int is not None else ''
+    ), [
         data.get('firstName', ''), data.get('middleName', ''), data.get('lastName', ''),
         data.get('age', 22), data.get('degree', ''),
         data.get('avgGrade', 0), data.get('avgProfGrade', 0), data.get('avgElecGrade', 0),
         data.get('ojtGrade', 0), data.get('softSkills', 0), data.get('hardSkills', 0),
         months,
-        user_id,
-    ])
+        data.get('workPosition', ''), data.get('employerName', ''), data.get('employmentType', ''),
+    ] + ([employed_int] if employed_int is not None else []) + [user_id])
     db.commit()
     return jsonify({'message': 'Profile updated successfully'}), 200
 
