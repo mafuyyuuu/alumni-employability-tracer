@@ -18,7 +18,7 @@ const sections = [
       { label: 'Forecasting',           to: '/admin/forecasting',           icon: MdShowChart },
       { label: 'Predict',                to: '/admin/predict',               icon: MdAssessment },
       { label: 'Employment Comparison', to: '/admin/employment-comparison', icon: MdCompareArrows },
-      { label: 'Predict & Report',      to: '/admin/predict-report',        icon: MdAssessment },
+      { label: 'Report',                 to: '/admin/predict-report',        icon: MdAssessment },
     ],
   },
   {
