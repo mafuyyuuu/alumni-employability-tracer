@@ -2398,6 +2398,227 @@ def generate_report():
     }), 201
 
 
+@admin_bp.route('/reports/count', methods=['GET'])
+@admin_required
+def report_row_count():
+    db = get_db()
+    years_raw = request.args.getlist('years')
+    programs_raw = request.args.getlist('programs')
+    query = "SELECT COUNT(*) as cnt FROM ml_training_rows WHERE is_active=1"
+    params = []
+    if years_raw:
+        placeholders = ','.join('?' * len(years_raw))
+        query += f" AND graduation_year IN ({placeholders})"
+        params += [int(y) for y in years_raw]
+    if programs_raw:
+        placeholders = ','.join('?' * len(programs_raw))
+        query += f" AND UPPER(TRIM(course)) IN ({placeholders})"
+        params += [p.upper().strip() for p in programs_raw]
+    count = db.execute(query, params).fetchone()['cnt']
+    return jsonify({'count': count}), 200
+
+
+@admin_bp.route('/reports/download', methods=['GET'])
+@admin_required
+def download_report():
+    import io
+    from flask import make_response
+
+    fmt = request.args.get('format', 'excel').lower()
+    years_raw = request.args.getlist('years')
+    programs_raw = request.args.getlist('programs')
+    factors_raw = request.args.getlist('factors')
+
+    db = get_db()
+
+    # Build query
+    query = "SELECT * FROM ml_training_rows WHERE is_active=1"
+    params = []
+    if years_raw:
+        placeholders = ','.join('?' * len(years_raw))
+        query += f" AND graduation_year IN ({placeholders})"
+        params += [int(y) for y in years_raw]
+    if programs_raw:
+        placeholders = ','.join('?' * len(programs_raw))
+        query += f" AND UPPER(TRIM(course)) IN ({placeholders})"
+        params += [p.upper().strip() for p in programs_raw]
+    query += " ORDER BY graduation_year, course, name"
+
+    rows = db.execute(query, params).fetchall()
+
+    # Default factors
+    all_factors = ['name', 'email', 'course', 'graduation_year', 'avg_grade',
+                   'avg_prof_grade', 'avg_elec_grade', 'ojt_grade',
+                   'soft_skills', 'hard_skills', 'board_passer', 'employed']
+    factor_labels = {
+        'name': 'Name', 'email': 'Email', 'course': 'Program',
+        'graduation_year': 'Year', 'avg_grade': 'GWA',
+        'avg_prof_grade': 'Prof Grade', 'avg_elec_grade': 'Elec Grade',
+        'ojt_grade': 'OJT Grade', 'soft_skills': 'Soft Skills',
+        'hard_skills': 'Hard Skills', 'board_passer': 'Board Passer',
+        'employed': 'Employment Status',
+    }
+    selected_factors = [f for f in all_factors if not factors_raw or f in factors_raw]
+
+    years_label = ', '.join(sorted(set(str(r['graduation_year']) for r in rows))) or 'All Years'
+
+    if fmt == 'excel':
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+
+        wb = openpyxl.Workbook()
+
+        # ── Sheet 1: Summary ─────────────────────────────────────────────
+        ws_sum = wb.active
+        ws_sum.title = 'Summary'
+        header_fill = PatternFill('solid', fgColor='163D22')
+        header_font = Font(bold=True, color='FFFFFF', size=11)
+        sub_fill = PatternFill('solid', fgColor='E6EDE8')
+        sub_font = Font(bold=True, color='163D22', size=10)
+
+        ws_sum['A1'] = 'PLP Alumni Employability Report'
+        ws_sum['A1'].font = Font(bold=True, size=14, color='163D22')
+        ws_sum['A2'] = f'Years: {years_label}'
+        ws_sum['A2'].font = Font(size=10, color='666666')
+        ws_sum['A3'] = f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M")}'
+        ws_sum['A3'].font = Font(size=10, color='666666')
+        ws_sum.append([])
+
+        sum_headers = ['Year', 'Program', 'Total', 'Employed', 'Unemployed', 'Employment Rate']
+        ws_sum.append(sum_headers)
+        for col, h in enumerate(sum_headers, 1):
+            cell = ws_sum.cell(row=5, column=col)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center')
+
+        # Aggregate
+        from collections import defaultdict
+        agg = defaultdict(lambda: {'total': 0, 'employed': 0})
+        for r in rows:
+            key = (r['graduation_year'], r['course'])
+            agg[key]['total'] += 1
+            if r['employed']:
+                agg[key]['employed'] += 1
+
+        row_num = 6
+        for (yr, prog), counts in sorted(agg.items()):
+            total = counts['total']
+            emp = counts['employed']
+            rate = f"{round(emp/total*100,1)}%" if total > 0 else '0%'
+            ws_sum.append([yr, prog, total, emp, total - emp, rate])
+            for col in range(1, 7):
+                cell = ws_sum.cell(row=row_num, column=col)
+                cell.alignment = Alignment(horizontal='center')
+            row_num += 1
+
+        # Totals row
+        total_all = len(rows)
+        emp_all = sum(1 for r in rows if r['employed'])
+        ws_sum.append(['TOTAL', 'All Programs', total_all, emp_all, total_all - emp_all,
+                       f"{round(emp_all/total_all*100,1)}%" if total_all > 0 else '0%'])
+        for col in range(1, 7):
+            cell = ws_sum.cell(row=row_num, column=col)
+            cell.fill = sub_fill
+            cell.font = sub_font
+            cell.alignment = Alignment(horizontal='center')
+
+        for col in range(1, 7):
+            ws_sum.column_dimensions[get_column_letter(col)].width = 18
+
+        # ── Sheet 2: Alumni Detail ────────────────────────────────────────
+        ws_det = wb.create_sheet('Alumni Data')
+        headers = [factor_labels.get(f, f) for f in selected_factors]
+        ws_det.append(headers)
+        for col, h in enumerate(headers, 1):
+            cell = ws_det.cell(row=1, column=col)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center')
+
+        for r in rows:
+            row_data = []
+            for f in selected_factors:
+                val = r[f] if f in r.keys() else ''
+                if f == 'employed':
+                    val = 'Employed' if val else 'Unemployed'
+                elif f == 'board_passer':
+                    val = 'Yes' if val else 'No'
+                row_data.append(val)
+            ws_det.append(row_data)
+
+        for col in range(1, len(selected_factors) + 1):
+            ws_det.column_dimensions[get_column_letter(col)].width = 16
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        resp = make_response(output.read())
+        resp.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        resp.headers['Content-Disposition'] = f'attachment; filename=PLP_Report_{years_label.replace(", ","_")}.xlsx'
+        return resp
+
+    else:  # PDF via HTML
+        emp_count = sum(1 for r in rows if r['employed'])
+        unemp_count = len(rows) - emp_count
+        emp_rate = round(emp_count / len(rows) * 100, 1) if rows else 0
+
+        from collections import defaultdict
+        agg = defaultdict(lambda: {'total': 0, 'employed': 0})
+        for r in rows:
+            key = (r['graduation_year'], r['course'])
+            agg[key]['total'] += 1
+            if r['employed']:
+                agg[key]['employed'] += 1
+
+        summary_rows = ''
+        for (yr, prog), counts in sorted(agg.items()):
+            t = counts['total']
+            e = counts['employed']
+            rate = f"{round(e/t*100,1)}%" if t > 0 else '0%'
+            summary_rows += f'<tr><td>{yr}</td><td>{prog}</td><td>{t}</td><td>{e}</td><td>{t-e}</td><td>{rate}</td></tr>'
+
+        html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>PLP Employment Report</title>
+<style>
+  body{{font-family:Arial,sans-serif;margin:30px;color:#1a1a1a}}
+  h1{{color:#163d22;font-size:22px;margin-bottom:4px}}
+  .sub{{color:#666;font-size:12px;margin-bottom:20px}}
+  .stats{{display:flex;gap:16px;margin:20px 0}}
+  .stat{{background:#e6ede8;border-radius:10px;padding:14px 22px;text-align:center}}
+  .stat-val{{font-size:26px;font-weight:900;color:#163d22}}
+  .stat-lbl{{font-size:11px;color:#666;margin-top:2px}}
+  table{{width:100%;border-collapse:collapse;font-size:12px;margin-top:16px}}
+  th{{background:#163d22;color:#fff;padding:8px 10px;text-align:left}}
+  td{{padding:7px 10px;border-bottom:1px solid #e5e7eb}}
+  tr:nth-child(even) td{{background:#f9fafb}}
+  .total-row td{{background:#e6ede8;font-weight:bold}}
+  @media print{{body{{margin:10px}}button{{display:none}}}}
+</style>
+</head><body>
+<button onclick="window.print()" style="float:right;padding:8px 18px;background:#163d22;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px">Print / Save PDF</button>
+<h1>PLP Alumni Employability Report</h1>
+<div class="sub">Years: {years_label} &nbsp;|&nbsp; Generated: {datetime.now().strftime('%B %d, %Y %H:%M')}</div>
+<div class="stats">
+  <div class="stat"><div class="stat-val">{len(rows):,}</div><div class="stat-lbl">Total Alumni</div></div>
+  <div class="stat"><div class="stat-val">{emp_count:,}</div><div class="stat-lbl">Employed</div></div>
+  <div class="stat"><div class="stat-val">{unemp_count:,}</div><div class="stat-lbl">Unemployed</div></div>
+  <div class="stat"><div class="stat-val">{emp_rate}%</div><div class="stat-lbl">Employment Rate</div></div>
+</div>
+<table>
+<tr><th>Year</th><th>Program</th><th>Total</th><th>Employed</th><th>Unemployed</th><th>Rate</th></tr>
+{summary_rows}
+<tr class="total-row"><td colspan="2">TOTAL</td><td>{len(rows):,}</td><td>{emp_count:,}</td><td>{unemp_count:,}</td><td>{emp_rate}%</td></tr>
+</table>
+</body></html>"""
+
+        resp = make_response(html)
+        resp.headers['Content-Type'] = 'text/html; charset=utf-8'
+        return resp
+
+
 # ── Voter Config ───────────────────────────────────────────────────────────
 
 @admin_bp.route('/voter-config', methods=['GET'])
