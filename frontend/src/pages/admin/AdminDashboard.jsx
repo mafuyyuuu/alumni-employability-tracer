@@ -41,12 +41,11 @@ export default function AdminDashboard() {
   const [metrics, setMetrics] = useState({ total_alumni: 0, employment_rate: 0, employment_rate_change: 0, graduate_success: 0, margin_of_error: 0 })
   const [employmentData, setEmploymentData] = useState([])
   const [health, setHealth] = useState(null)
-  const [model, setModel] = useState('Linear Regression')
   const [predictSummary, setPredictSummary] = useState(null)
   const [predictYear, setPredictYear] = useState(null)
 
   useEffect(() => {
-    api.get('/admin/dashboard', { params: { model } }).then(r => {
+    api.get('/admin/dashboard').then(r => {
       setMetrics(r.data.metrics)
       setEmploymentData(r.data.employment_data || [])
     }).catch(() => {})
@@ -57,7 +56,7 @@ export default function AdminDashboard() {
       setPredictSummary(r.data.summary || null)
       setPredictYear(r.data.graduation_year || null)
     }).catch(() => {})
-  }, [model])
+  }, [])
 
   const metricCards = [
     { label: 'Total Alumni',    value: metrics.total_alumni ?? 0,     sub: 'Alumni in dataset',                  icon: MdPeople,       color: '#0f2d1a', bg: '#e6ede8' },
@@ -145,20 +144,6 @@ export default function AdminDashboard() {
               <div>
                 <h2 className="text-sm font-bold text-gray-900">Employment Rate Forecast</h2>
                 <p className="text-xs text-gray-400 mt-0.5">Historical trend with 1-year model projection</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-500">Model</span>
-                <select
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700 focus:outline-none"
-                >
-                  <option>Linear Regression</option>
-                  <option>Random Forest</option>
-                  <option>Auto ARIMA (AIC search)</option>
-                  <option>ARIMA (p=2, d=1, q=2)</option>
-                  <option>ARIMA (p=1, d=1, q=1)</option>
-                </select>
               </div>
             </div>
             <ResponsiveContainer width="100%" height={240}>

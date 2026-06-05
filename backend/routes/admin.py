@@ -787,7 +787,8 @@ def data_health():
 @admin_required
 def dashboard():
     db = get_db()
-    model_str = request.args.get('model', 'Linear Regression')
+    # Auto-pick best model by R² — no manual selection on dashboard
+    model_str = 'Linear Regression'
 
     # Check if any real dataset has been uploaded
     training_count = db.execute(
@@ -825,7 +826,14 @@ def dashboard():
             [latest_yr] if latest_yr else []
         ).fetchone()['cnt']
 
-        employment_rate = round(employed_count / non_graduating * 100, 1) if non_graduating > 0 else 0
+        # Use the most recent year's rate from employment_data so card matches graph
+        _ensure_employment_data_from_training(db)
+        latest_emp_row = db.execute(
+            "SELECT overall_rate FROM employment_data ORDER BY year DESC LIMIT 1"
+        ).fetchone()
+        employment_rate = round(float(latest_emp_row['overall_rate']), 1) if latest_emp_row else (
+            round(employed_count / non_graduating * 100, 1) if non_graduating > 0 else 0
+        )
 
         # Graduate success = employment rate of the latest uploaded year's cohort
         latest_yr_total = db.execute(
@@ -860,7 +868,7 @@ def dashboard():
                 margin_of_error = round(float(mape), 1)
 
         if len(emp_rows) >= 2:
-            emp_change = round(emp_rows[-1]['overall_rate'] - emp_rows[-2]['overall_rate'], 1)
+            emp_change = round(float(emp_rows[-1]['overall_rate']) - float(emp_rows[-2]['overall_rate']), 1)
 
     return jsonify({
         'metrics': {
