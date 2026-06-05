@@ -902,9 +902,17 @@ def list_users():
         "SELECT DISTINCT course FROM ml_training_rows WHERE is_active=1 AND course IS NOT NULL ORDER BY course"
     ).fetchall()]
 
-    # 1. Fetch registered alumni (exclude test accounts)
+    # 1. Fetch registered alumni — exclude test accounts by flag OR by known test emails
+    TEST_EMAILS = (
+        'juan.delacruz@plp.edu.ph','maria.santos@plp.edu.ph','pedro.reyes@plp.edu.ph',
+        'ana.garcia@plp.edu.ph','jose.mendoza@plp.edu.ph',
+    )
+    placeholders = ','.join('?' * len(TEST_EMAILS))
     reg_rows = db.execute(
-        "SELECT * FROM users WHERE role = 'alumni' AND (is_test_account = 0 OR is_test_account IS NULL)"
+        f"SELECT * FROM users WHERE role='alumni' "
+        f"AND (is_test_account=0 OR is_test_account IS NULL) "
+        f"AND LOWER(email) NOT IN ({placeholders})",
+        list(TEST_EMAILS)
     ).fetchall()
     reg_emails = {r['email'].lower() for r in reg_rows if r['email']}
 
