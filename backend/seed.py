@@ -133,6 +133,24 @@ def seed():
         except Exception as e:
             print(f"NCAE seed skipped: {e}")
 
+    # ── Test alumni accounts ──────────────────────────────────────────────
+    test_alumni = [
+        ('Juan', 'Dela Cruz', 'BSCS', 'juan.delacruz@plp.edu.ph', 2023, 23),
+        ('Maria', 'Santos', 'BSIT', 'maria.santos@plp.edu.ph', 2023, 22),
+        ('Pedro', 'Reyes', 'BSA', 'pedro.reyes@plp.edu.ph', 2022, 24),
+        ('Ana', 'Garcia', 'BSN', 'ana.garcia@plp.edu.ph', 2023, 22),
+        ('Jose', 'Mendoza', 'BSBA', 'jose.mendoza@plp.edu.ph', 2022, 25),
+    ]
+    for first, last, course, email, yr, age in test_alumni:
+        c.execute("SELECT id FROM users WHERE email = ?", [email])
+        if not c.fetchone():
+            c.execute("""
+                INSERT INTO users (first_name, last_name, course, email, password_hash,
+                    role, account_status, graduation_year, age, employed, ncae_completed,
+                    soft_skills, hard_skills, avg_grade, board_passer)
+                VALUES (?,?,?,?,?,'alumni','Active',?,?,1,1,75,75,85,0)
+            """, (first, last, course, email, hash_pw('pass123'), yr, age))
+
     # ── Fill pending skills from ml_training_rows averages ───────────────
     # For alumni who haven't completed NCAE and have no skills data,
     # fill soft_skills and hard_skills using program/year averages from training data.
