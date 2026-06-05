@@ -2160,15 +2160,23 @@ def model_status():
     return jsonify({'model': predictor_status()}), 200
 
 
+TEST_ACCOUNT_EMAILS = (
+    'juan.delacruz@plp.edu.ph', 'maria.santos@plp.edu.ph', 'pedro.reyes@plp.edu.ph',
+    'ana.garcia@plp.edu.ph', 'jose.mendoza@plp.edu.ph',
+)
+
 def _sync_users_to_training_rows(db):
     """Copy alumni user records into ml_training_rows so models can train."""
-    alumni = db.execute("""
+    ep = ','.join('?' * len(TEST_ACCOUNT_EMAILS))
+    alumni = db.execute(f"""
         SELECT id, first_name, last_name, email, course, graduation_year, age,
                avg_grade, avg_prof_grade, avg_elec_grade, ojt_grade,
                soft_skills, hard_skills, board_passer, board_exam_score, employed
         FROM users
         WHERE role = 'alumni' AND graduation_year IS NOT NULL
-    """).fetchall()
+          AND (is_test_account = 0 OR is_test_account IS NULL)
+          AND LOWER(email) NOT IN ({ep})
+    """, list(TEST_ACCOUNT_EMAILS)).fetchall()
 
     inserted = 0
     for u in alumni:
@@ -2215,6 +2223,11 @@ def sync_and_retrain():
     db = get_db()
     db_path = current_app.config.get('DATABASE', os.getenv('DATABASE', 'plp_alumni.db'))
 
+    # Remove test account data from training rows (in case they were previously synced)
+    ep = ','.join('?' * len(TEST_ACCOUNT_EMAILS))
+    db.execute(f"DELETE FROM ml_training_rows WHERE LOWER(email) IN ({ep}) OR source_name='users_sync'",
+               list(TEST_ACCOUNT_EMAILS))
+    db.commit()
     # Remove accounts for years with no training data
     _sync_alumni_to_training_data(db)
     synced = _sync_users_to_training_rows(db)
@@ -3458,21 +3471,21 @@ def training_data_years():
 
 def _sync_alumni_to_training_data(db):
     """Remove alumni accounts for years that have no training data (keeps in sync with datasets)."""
+    ep = ','.join('?' * len(TEST_ACCOUNT_EMAILS))
     years_with_data = set(
         r['graduation_year'] for r in
         db.execute("SELECT DISTINCT graduation_year FROM ml_training_rows WHERE is_active=1").fetchall()
     )
+    base = (f"DELETE FROM users WHERE role='alumni' "
+            f"AND (is_test_account=0 OR is_test_account IS NULL) "
+            f"AND LOWER(email) NOT IN ({ep})")
     if not years_with_data:
-        # No training data at all — remove all non-test alumni
-        removed = db.execute(
-            "DELETE FROM users WHERE role='alumni' AND (is_test_account=0 OR is_test_account IS NULL)"
-        ).rowcount
+        removed = db.execute(base, list(TEST_ACCOUNT_EMAILS)).rowcount
     else:
-        placeholders = ','.join('?' * len(years_with_data))
+        yp = ','.join('?' * len(years_with_data))
         removed = db.execute(
-            f"DELETE FROM users WHERE role='alumni' AND (is_test_account=0 OR is_test_account IS NULL) "
-            f"AND graduation_year NOT IN ({placeholders})",
-            list(years_with_data)
+            base + f" AND graduation_year NOT IN ({yp})",
+            list(TEST_ACCOUNT_EMAILS) + list(years_with_data)
         ).rowcount
     db.commit()
     return removed
