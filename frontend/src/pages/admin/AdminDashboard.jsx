@@ -86,14 +86,14 @@ export default function AdminDashboard() {
           {metricCards.map((m) => {
             const Icon = m.icon
             return (
-              <div key={m.label} className="bg-white rounded-2xl p-4 flex items-center gap-3" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: m.bg }}>
-                  <Icon className="text-base" style={{ color: m.color }} />
+              <div key={m.label} className="bg-white rounded-2xl flex items-center gap-3 h-full" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)', padding: '0 20px' }}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: m.bg }}>
+                  <Icon className="text-lg" style={{ color: m.color }} />
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs text-gray-400 mb-0.5 truncate">{m.label}</p>
-                  <p className="text-xl font-black leading-none" style={{ color: m.color }}>{m.value}</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5 truncate">{m.sub}</p>
+                  <p className="text-2xl font-black leading-none" style={{ color: m.color }}>{m.value}</p>
+                  <p className="text-xs text-gray-400 mt-1 truncate">{m.sub}</p>
                 </div>
               </div>
             )
