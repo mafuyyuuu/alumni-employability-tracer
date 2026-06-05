@@ -959,7 +959,7 @@ def list_users():
         }
         all_rows.append(ds_user)
 
-    SCORE_THRESHOLD = 80  # high score ≥ 80
+    SCORE_THRESHOLD = 72  # high score ≥ 80
     FAST_MONTHS     = 4   # fast employment ≤ 4 months
 
     # Latest uploaded dataset year = graduating students reference year
@@ -1275,7 +1275,7 @@ def predict_graduating():
     if LATEST_YEAR not in available_years:
         LATEST_YEAR = latest
 
-    SCORE_THRESHOLD = 80
+    SCORE_THRESHOLD = 72
     FAST_MONTHS = 4
 
     hist_rows = db.execute("""
@@ -1356,15 +1356,15 @@ def predict_graduating():
 
     def _tier(score, rf_prob, knn_emp_rate):
         """
-        Likely Employable  : score >= 80 AND (RF >= 0.65 OR kNN emp rate >= 0.75)
-        Employable         : score >= 65 OR RF >= 0.55 OR kNN emp rate >= 0.55
+        Likely Employable  : score >= 72 AND (RF >= 0.55 OR kNN emp rate >= 0.60)
+        Employable         : score >= 58 OR RF >= 0.50 OR kNN emp rate >= 0.50
         Least Employable   : everything else
         """
         knn = knn_emp_rate if knn_emp_rate is not None else 0.5
         rf  = rf_prob      if rf_prob      is not None else 0.5
-        if score >= 80 and (rf >= 0.65 or knn >= 0.75):
+        if score >= 72 and (rf >= 0.55 or knn >= 0.60):
             return 'Likely Employable'
-        if score >= 65 or rf >= 0.55 or knn >= 0.55:
+        if score >= 58 or rf >= 0.50 or knn >= 0.50:
             return 'Employable'
         return 'Least Employable'
 
