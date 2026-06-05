@@ -2207,6 +2207,8 @@ def sync_and_retrain():
     db = get_db()
     db_path = current_app.config.get('DATABASE', os.getenv('DATABASE', 'plp_alumni.db'))
 
+    # Remove accounts for years with no training data
+    _sync_alumni_to_training_data(db)
     synced = _sync_users_to_training_rows(db)
     total_rows = db.execute(
         "SELECT COUNT(*) FROM ml_training_rows WHERE is_active=1"
@@ -3446,6 +3448,28 @@ def training_data_years():
     }), 200
 
 
+def _sync_alumni_to_training_data(db):
+    """Remove alumni accounts for years that have no training data (keeps in sync with datasets)."""
+    years_with_data = set(
+        r['graduation_year'] for r in
+        db.execute("SELECT DISTINCT graduation_year FROM ml_training_rows WHERE is_active=1").fetchall()
+    )
+    if not years_with_data:
+        # No training data at all — remove all non-test alumni
+        removed = db.execute(
+            "DELETE FROM users WHERE role='alumni' AND (is_test_account=0 OR is_test_account IS NULL)"
+        ).rowcount
+    else:
+        placeholders = ','.join('?' * len(years_with_data))
+        removed = db.execute(
+            f"DELETE FROM users WHERE role='alumni' AND (is_test_account=0 OR is_test_account IS NULL) "
+            f"AND graduation_year NOT IN ({placeholders})",
+            list(years_with_data)
+        ).rowcount
+    db.commit()
+    return removed
+
+
 @admin_bp.route('/training-data/by-year/<int:year>', methods=['DELETE'])
 @admin_required
 def delete_training_data_by_year(year):
@@ -3455,7 +3479,8 @@ def delete_training_data_by_year(year):
     db.execute("DELETE FROM program_rates WHERE year = ?", [year])
     # Also delete alumni accounts tied to this graduation year
     alumni_cur = db.execute(
-        "DELETE FROM users WHERE role = 'alumni' AND graduation_year = ?", [year]
+        "DELETE FROM users WHERE role='alumni' AND graduation_year=? AND (is_test_account=0 OR is_test_account IS NULL)",
+        [year]
     )
     db.commit()
     return jsonify({
