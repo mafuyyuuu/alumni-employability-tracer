@@ -62,7 +62,6 @@ export default function AdminDashboard() {
   const metricCards = [
     { label: 'Total Alumni',    value: metrics.total_alumni ?? 0,     sub: 'Alumni in dataset',                  icon: MdPeople,       color: '#0f2d1a', bg: '#e6ede8' },
     { label: 'Employment Rate', value: `${metrics.employment_rate}%`, sub: `↑ ${metrics.employment_rate_change}% vs last year`, icon: MdTrendingUp, color: '#10b981', bg: '#f0fdf4' },
-    { label: 'Margin of Error', value: `±${metrics.margin_of_error}%`, sub: 'Forecast model accuracy',           icon: MdErrorOutline, color: '#f59e0b', bg: '#fffbeb' },
   ]
 
   const forecastYear = employmentData.find(d => d.forecast)?.year
@@ -83,11 +82,11 @@ export default function AdminDashboard() {
         </div>
 
         {/* Metrics */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           {metricCards.map((m) => {
             const Icon = m.icon
             return (
-              <div key={m.label} className="bg-white rounded-2xl p-5 flex items-start gap-3" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+              <div key={m.label} className="bg-white rounded-2xl p-5 flex items-center gap-3" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)', minHeight: '90px' }}>
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: m.bg }}>
                   <Icon className="text-lg" style={{ color: m.color }} />
                 </div>
@@ -101,37 +100,37 @@ export default function AdminDashboard() {
           })}
 
           {/* Employability Prediction card */}
-          <div className="bg-white rounded-2xl p-5 flex flex-col gap-2 cursor-pointer hover:shadow-md transition-all col-span-2 lg:col-span-1"
-            style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}
+          <div className="bg-white rounded-2xl p-5 cursor-pointer hover:shadow-md transition-all"
+            style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)', minHeight: '90px' }}
             onClick={() => navigate('/admin/predict')}>
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-3">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#e6ede8' }}>
                 <MdWorkOutline className="text-lg" style={{ color: '#0f2d1a' }} />
               </div>
               <div>
                 <p className="text-xs text-gray-400">Employability Prediction</p>
-                <p className="text-[11px] font-semibold" style={{ color: '#0f2d1a' }}>
+                <p className="text-xs font-semibold" style={{ color: '#0f2d1a' }}>
                   {predictYear ? `Batch ${predictYear}` : 'Latest Batch'}
                 </p>
               </div>
             </div>
             {predictSummary ? (
-              <div className="grid grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-3 gap-2">
                 <div className="rounded-xl p-2 text-center" style={{ background: '#dcfce7' }}>
-                  <p className="text-lg font-black" style={{ color: '#15803d' }}>{predictSummary.high ?? 0}</p>
-                  <p className="text-[9px] font-bold text-green-700 leading-tight">Likely</p>
+                  <p className="text-xl font-black" style={{ color: '#15803d' }}>{predictSummary.high ?? 0}</p>
+                  <p className="text-[10px] font-bold text-green-700">Likely</p>
                 </div>
                 <div className="rounded-xl p-2 text-center" style={{ background: '#dbeafe' }}>
-                  <p className="text-lg font-black" style={{ color: '#1d4ed8' }}>{predictSummary.employable ?? 0}</p>
-                  <p className="text-[9px] font-bold text-blue-700 leading-tight">Employable</p>
+                  <p className="text-xl font-black" style={{ color: '#1d4ed8' }}>{predictSummary.employable ?? 0}</p>
+                  <p className="text-[10px] font-bold text-blue-700">Employable</p>
                 </div>
                 <div className="rounded-xl p-2 text-center" style={{ background: '#fee2e2' }}>
-                  <p className="text-lg font-black" style={{ color: '#b91c1c' }}>{predictSummary.least ?? 0}</p>
-                  <p className="text-[9px] font-bold text-red-700 leading-tight">Least</p>
+                  <p className="text-xl font-black" style={{ color: '#b91c1c' }}>{predictSummary.least ?? 0}</p>
+                  <p className="text-[10px] font-bold text-red-700">Least</p>
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-gray-400 text-center py-2">No prediction data</p>
+              <p className="text-xs text-gray-400 text-center py-1">No prediction data</p>
             )}
           </div>
         </div>
