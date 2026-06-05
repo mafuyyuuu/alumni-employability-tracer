@@ -51,26 +51,14 @@ def update_profile():
     data = request.get_json()
     db = get_db()
 
-    months = data.get('monthsToEmployment')
-    if months is not None:
-        try:
-            months = int(months)
-        except (ValueError, TypeError):
-            months = None
-
     employed_val = data.get('employed')
-    if employed_val is None:
-        employed_int = None
-    else:
+    employed_int = None
+    if employed_val is not None:
         employed_int = 1 if str(employed_val).lower() in ('true', '1', 'yes', 'employed') else 0
 
     db.execute("""
         UPDATE users SET
-            first_name = ?, middle_name = ?, last_name = ?,
-            age = ?, course = ?,
-            avg_grade = ?, avg_prof_grade = ?, avg_elec_grade = ?,
-            ojt_grade = ?, soft_skills = ?, hard_skills = ?,
-            months_to_employment = ?,
+            first_name = ?, middle_name = ?, last_name = ?, age = ?,
             work_position = ?, employer_name = ?, employment_type = ?
             {employed_clause}
         WHERE id = ?
@@ -78,10 +66,7 @@ def update_profile():
         employed_clause=', employed = ?' if employed_int is not None else ''
     ), [
         data.get('firstName', ''), data.get('middleName', ''), data.get('lastName', ''),
-        data.get('age', 22), data.get('degree', ''),
-        data.get('avgGrade', 0), data.get('avgProfGrade', 0), data.get('avgElecGrade', 0),
-        data.get('ojtGrade', 0), data.get('softSkills', 0), data.get('hardSkills', 0),
-        months,
+        data.get('age', 22),
         data.get('workPosition', ''), data.get('employerName', ''), data.get('employmentType', ''),
     ] + ([employed_int] if employed_int is not None else []) + [user_id])
     db.commit()
