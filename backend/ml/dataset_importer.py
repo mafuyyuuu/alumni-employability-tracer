@@ -369,7 +369,9 @@ def import_training_csv(
     required = [c for c in REQUIRED_COLUMNS if not (c == 'graduation_year' and year_override)]
     _validate_required_columns_list(normalized_columns, required)
 
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=30)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout = 30000")
     try:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
