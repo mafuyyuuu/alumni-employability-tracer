@@ -48,7 +48,6 @@ export default function Predict() {
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [tierFilter, setTierFilter] = useState('All')
-  const [selectedYear, setSelectedYear] = useState(null)
   const [page, setPage] = useState(1)
   const [insights, setInsights] = useState(null)
   const [insightsLoading, setInsightsLoading] = useState(false)
@@ -68,17 +67,11 @@ export default function Predict() {
     const params = new URLSearchParams()
     if (search) params.set('search', search)
     if (tierFilter !== 'All') params.set('tier', tierFilter)
-    if (selectedYear) params.set('year', selectedYear)
     api.get(`/admin/predict?${params}`)
-      .then(r => {
-        setData(r.data)
-        setPage(1)
-        // Set default year on first load
-        if (!selectedYear && r.data.graduation_year) setSelectedYear(r.data.graduation_year)
-      })
+      .then(r => { setData(r.data); setPage(1) })
       .catch(e => setError(e.response?.data?.error || 'Failed to load predictions.'))
       .finally(() => setLoading(false))
-  }, [search, tierFilter, selectedYear])
+  }, [search, tierFilter])
 
   const students = data?.students || []
   const summary = data?.summary || { high: 0, employable: 0, least: 0, total: 0 }
@@ -94,24 +87,10 @@ export default function Predict() {
         <div className="flex items-start justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Employability Prediction</h1>
-            <p className="text-sm text-gray-500 mt-1">Students of {gradYear || '—'}</p>
+            <p className="text-sm text-gray-500 mt-1">
+              Latest batch — {gradYear ? `Students of ${gradYear}` : '—'}
+            </p>
           </div>
-          {(data?.available_years || []).length > 1 && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-gray-500">Year:</span>
-              <div className="flex gap-1 flex-wrap justify-end">
-                {(data.available_years).map(yr => (
-                  <button key={yr} onClick={() => { setSelectedYear(yr); setPage(1) }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-                    style={selectedYear === yr
-                      ? { background: '#0f2d1a', color: '#fff' }
-                      : { background: '#e6ede8', color: '#0f2d1a' }}>
-                    {yr}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Summary Cards */}
