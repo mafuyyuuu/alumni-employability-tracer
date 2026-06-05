@@ -2228,6 +2228,12 @@ def sync_and_retrain():
     db.execute(f"DELETE FROM ml_training_rows WHERE LOWER(email) IN ({ep}) OR source_name='users_sync'",
                list(TEST_ACCOUNT_EMAILS))
     db.commit()
+    # Clear employment_data and program_rates if no real training data remains
+    real_count = db.execute("SELECT COUNT(*) FROM ml_training_rows WHERE is_active=1").fetchone()[0]
+    if real_count == 0:
+        db.execute("DELETE FROM employment_data")
+        db.execute("DELETE FROM program_rates")
+        db.commit()
     # Remove accounts for years with no training data
     _sync_alumni_to_training_data(db)
     synced = _sync_users_to_training_rows(db)
