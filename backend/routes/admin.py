@@ -2860,19 +2860,23 @@ def upload_model():
 @admin_required
 def list_uploads():
     db = get_db()
-    rows = db.execute(
-        "SELECT * FROM model_uploads ORDER BY uploaded_at DESC"
-    ).fetchall()
+    # Return only the latest upload per filename (deduped), ordered by date
+    rows = db.execute("""
+        SELECT * FROM model_uploads
+        WHERE id IN (
+            SELECT MAX(id) FROM model_uploads GROUP BY original_filename
+        )
+        ORDER BY uploaded_at DESC
+    """).fetchall()
 
     uploads = [{
         'id': r['id'],
         'name': r['name'],
         'filename': r['original_filename'],
         'size': f"{r['file_size'] / 1024:.2f} KB",
-        'records': f"{r['records']} records",
+        'records': f"{r['records']:,} rows" if isinstance(r['records'], int) else f"{r['records']} rows",
         'status': r['status'],
         'date': r['uploaded_at'][:10] if r['uploaded_at'] else '',
-        'sha256': r['sha256'],
         'applied_to_training': bool(r['applied_to_training']),
     } for r in rows]
 

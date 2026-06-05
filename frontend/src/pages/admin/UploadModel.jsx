@@ -840,21 +840,27 @@ export default function UploadModel() {
 
             {/* Recent Uploads */}
             <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-              <h3 className="text-xs font-bold text-gray-900 mb-4">Recent Uploads</h3>
-              <div className="space-y-3.5">
+              <h3 className="text-xs font-bold text-gray-900 mb-4">
+                Uploaded Datasets
+                <span className="ml-1.5 text-gray-400 font-normal">({recentUploads.length})</span>
+              </h3>
+              <div className="space-y-2.5">
                 {recentUploads.map(upload => (
-                  <div key={upload.id || upload.name} className="flex items-start gap-2.5">
-                    <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#e6ede8' }}>
+                  <div key={upload.id || upload.name} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl" style={{ background: '#f9fafb' }}>
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#e6ede8' }}>
                       <MdInsertDriveFile className="text-sm" style={{ color: '#1a3d27' }} />
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-gray-700 leading-tight truncate">{upload.name}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{upload.size} · {upload.records}</p>
-                      <p className="text-xs text-gray-300">{upload.date}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-gray-800 leading-tight truncate">{upload.filename || upload.name}</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">{upload.records} · {upload.date}</p>
                     </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0"
+                      style={{ background: upload.applied_to_training ? '#e6ede8' : '#f3f4f6', color: upload.applied_to_training ? '#0f2d1a' : '#9ca3af' }}>
+                      {upload.applied_to_training ? 'Imported' : 'Archived'}
+                    </span>
                   </div>
                 ))}
-                {recentUploads.length === 0 && <p className="text-xs text-gray-400 text-center py-2">No uploads yet</p>}
+                {recentUploads.length === 0 && <p className="text-xs text-gray-400 text-center py-4">No datasets uploaded yet</p>}
               </div>
             </div>
           </div>
