@@ -59,6 +59,11 @@ COLUMN_ALIASES = {
     'employedstatus':           'employment_status',
     'is_employed':              'employment_status',
     'status':                   'employment_status',
+    # board passer
+    'board_passer':             'board_passer',
+    'boardpasser':              'board_passer',
+    'board_exam_passer':        'board_passer',
+    'licensure_passer':         'board_passer',
 }
 
 # Course normalisation — maps non-standard names to canonical codes
@@ -234,7 +239,6 @@ def _map_row(row, source_row_id, current_year, year_override=None):
 
     avg_grade      = _gwa_to_grade(row.get('GWA'))
     avg_prof_grade = _auto_grade(row.get('capstone_grade'))
-    # Auto-detect GWA vs percentage scale for skills
     soft_skills   = _skills_to_percent(row.get('soft_skills_avg', 0))
     hard_skills   = _skills_to_percent(row.get('hard_skills_avg', 0))
     avg_elec_grade = _derive_elective_grade(row, soft_skills, hard_skills)
@@ -242,6 +246,7 @@ def _map_row(row, source_row_id, current_year, year_override=None):
     internship_duration    = _to_float(row.get('internship_duration_months'), 0.0)
     ojt_grade = _derive_ojt_grade(avg_prof_grade, internship_experience, internship_duration)
     age = _derive_age(graduation_year, current_year)
+    board_passer = 1 if _to_int(row.get('board_passer', 0), 0) >= 1 else 0
 
     return {
         'source_row_id': str(source_row_id),
@@ -256,6 +261,7 @@ def _map_row(row, source_row_id, current_year, year_override=None):
         'ojt_grade': float(ojt_grade),
         'soft_skills': float(soft_skills),
         'hard_skills': float(hard_skills),
+        'board_passer': board_passer,
         'employed': int(employed),
     }, None
 
@@ -395,6 +401,7 @@ def import_training_csv(
                     mapped['ojt_grade'],
                     mapped['soft_skills'],
                     mapped['hard_skills'],
+                    mapped.get('board_passer', 0),
                     mapped['employed'],
                 ])
                 imported_rows += 1
@@ -405,15 +412,16 @@ def import_training_csv(
             INSERT INTO ml_training_rows (
                 source_name, source_row_id, name, email, course,
                 graduation_year, age, avg_grade, avg_prof_grade, avg_elec_grade,
-                ojt_grade, soft_skills, hard_skills, employed, is_active, imported_at
+                ojt_grade, soft_skills, hard_skills, board_passer, employed, is_active, imported_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'))
             ON CONFLICT(source_name, source_row_id) DO UPDATE SET
                 name = excluded.name, email = excluded.email, course = excluded.course,
                 graduation_year = excluded.graduation_year, age = excluded.age,
                 avg_grade = excluded.avg_grade, avg_prof_grade = excluded.avg_prof_grade,
                 avg_elec_grade = excluded.avg_elec_grade, ojt_grade = excluded.ojt_grade,
                 soft_skills = excluded.soft_skills, hard_skills = excluded.hard_skills,
+                board_passer = excluded.board_passer,
                 employed = excluded.employed, is_active = 1, imported_at = datetime('now')
         """, batch)
         conn.commit()
