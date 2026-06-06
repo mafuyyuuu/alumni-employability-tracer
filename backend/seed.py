@@ -153,6 +153,18 @@ def seed():
         else:
             c.execute("UPDATE users SET is_test_account=1 WHERE email=?", [email])
 
+    # ── Demo account for NCAE questionnaire testing ──────────────────────
+    c.execute("SELECT id FROM users WHERE email = 'demo.alumni@plp.edu.ph'")
+    if not c.fetchone():
+        c.execute("""
+            INSERT INTO users (first_name, last_name, course, email, password_hash,
+                role, account_status, graduation_year, age, employed, ncae_completed,
+                soft_skills, hard_skills, avg_grade, board_passer, is_test_account)
+            VALUES (?,?,?,?,?,'alumni','Active',2024,22,0,0,0,0,0,0,1)
+        """, ('Demo', 'Alumni', 'BSCS', 'demo.alumni@plp.edu.ph', hash_pw('demo123')))
+    else:
+        c.execute("UPDATE users SET is_test_account=1, ncae_completed=0 WHERE email='demo.alumni@plp.edu.ph'")
+
     # ── Fill pending skills from ml_training_rows averages ───────────────
     # For alumni who haven't completed NCAE and have no skills data,
     # fill soft_skills and hard_skills using program/year averages from training data.
