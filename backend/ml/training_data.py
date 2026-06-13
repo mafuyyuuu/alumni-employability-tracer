@@ -1,11 +1,10 @@
 import os
 import sqlite3
-from typing import Tuple
+from typing import Tuple, Optional
 
 import pandas as pd
 
 NUMERIC_FEATURES = [
-    'age',
     'graduation_year',
     'avg_grade',
     'avg_prof_grade',
@@ -13,6 +12,8 @@ NUMERIC_FEATURES = [
     'ojt_grade',
     'soft_skills',
     'hard_skills',
+    'board_passer',
+    'board_exam_score',
 ]
 COURSE_FEATURE = 'course'
 TARGET_FEATURE = 'employed'
@@ -27,7 +28,7 @@ def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
     return row is not None
 
 
-def load_training_dataframe(database_path: str | None = None) -> pd.DataFrame:
+def load_training_dataframe(database_path: Optional[str] = None) -> pd.DataFrame:
     """Load employability training rows from live DB records."""
     db_path = database_path or os.getenv('DATABASE', 'plp_alumni.db')
     conn = sqlite3.connect(db_path)
@@ -37,13 +38,14 @@ def load_training_dataframe(database_path: str | None = None) -> pd.DataFrame:
             u.id AS user_id,
             UPPER(TRIM(COALESCE(u.course, 'UNKNOWN'))) AS course,
             u.graduation_year,
-            u.age,
             u.avg_grade,
             u.avg_prof_grade,
             u.avg_elec_grade,
             u.ojt_grade,
             u.soft_skills,
             u.hard_skills,
+            u.board_passer,
+            u.board_exam_score,
             CASE
                 WHEN lf.employment_status IN ('hired', 'elsewhere') THEN 1
                 WHEN lf.employment_status = 'looking' THEN 0
@@ -69,13 +71,14 @@ def load_training_dataframe(database_path: str | None = None) -> pd.DataFrame:
                 NULL AS user_id,
                 UPPER(TRIM(COALESCE(m.course, 'UNKNOWN'))) AS course,
                 m.graduation_year,
-                m.age,
                 m.avg_grade,
                 m.avg_prof_grade,
                 m.avg_elec_grade,
                 m.ojt_grade,
                 m.soft_skills,
                 m.hard_skills,
+                m.board_passer,
+                m.board_exam_score,
                 COALESCE(m.employed, 0) AS employed
             FROM ml_training_rows m
             WHERE m.is_active = 1
@@ -96,13 +99,14 @@ def load_training_dataframe(database_path: str | None = None) -> pd.DataFrame:
             'user_id',
             'course',
             'graduation_year',
-            'age',
             'avg_grade',
             'avg_prof_grade',
             'avg_elec_grade',
             'ojt_grade',
             'soft_skills',
             'hard_skills',
+            'board_passer',
+            'board_exam_score',
             'employed',
         ])
 
@@ -166,6 +170,7 @@ def build_feature_matrix(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series, dic
         else 'UNKNOWN'
     )
 
+    # Ensure graduation_year and age are included but aware they are less critical
     X = pd.get_dummies(
         work[NUMERIC_FEATURES + [COURSE_FEATURE]],
         columns=[COURSE_FEATURE],

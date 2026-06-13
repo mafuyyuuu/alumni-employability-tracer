@@ -11,6 +11,7 @@ import FeedbackForm from './pages/alumni/FeedbackForm'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import UploadModel from './pages/admin/UploadModel'
 import Forecasting from './pages/admin/Forecasting'
+import Predict from './pages/admin/Predict'
 import EmploymentComparison from './pages/admin/EmploymentComparison'
 import PredictReport from './pages/admin/PredictReport'
 import VoterConfig from './pages/admin/VoterConfig'
@@ -18,6 +19,11 @@ import AdminCompanies from './pages/admin/AdminCompanies'
 import AdminJobs from './pages/admin/AdminJobs'
 import Users from './pages/admin/Users'
 import Feedbacks from './pages/admin/Feedbacks'
+import Programs from './pages/admin/Programs'
+import NCAEQuestionnaire from './pages/alumni/NCAEQuestionnaire'
+import CompanyDashboard from './pages/company/CompanyDashboard'
+import CompanyJobs from './pages/company/CompanyJobs'
+import CompanyProfile from './pages/company/CompanyProfile'
 
 export default function App() {
   return (
@@ -35,18 +41,28 @@ export default function App() {
         <Route path="/alumni/notifications"    element={<Notifications />} />
         <Route path="/alumni/profile-settings" element={<ProfileSettings />} />
         <Route path="/alumni/feedback"         element={<FeedbackForm />} />
+        <Route path="/alumni/ncae"             element={<NCAEQuestionnaire />} />
 
         {/* Admin routes */}
         <Route path="/admin/dashboard"             element={<AdminDashboard />} />
-        <Route path="/admin/forecasting"           element={<Forecasting />} />
+        <Route path="/admin/forecasting"      element={<Forecasting />} />
+        <Route path="/admin/predict"          element={<Predict />} />
+
         <Route path="/admin/employment-comparison" element={<EmploymentComparison />} />
         <Route path="/admin/predict-report"        element={<PredictReport />} />
         <Route path="/admin/voter-config"          element={<VoterConfig />} />
+        <Route path="/admin/programs"              element={<Programs />} />
         <Route path="/admin/companies"             element={<AdminCompanies />} />
         <Route path="/admin/jobs"                  element={<AdminJobs />} />
         <Route path="/admin/users"                 element={<Users />} />
         <Route path="/admin/feedbacks"             element={<Feedbacks />} />
         <Route path="/admin/upload-model"          element={<UploadModel />} />
+
+        {/* Company portal routes */}
+        <Route path="/company/dashboard" element={<CompanyDashboard />} />
+        <Route path="/company/jobs"      element={<CompanyJobs />} />
+        <Route path="/company/profile"   element={<CompanyProfile />} />
+        <Route path="/company"           element={<Navigate to="/company/dashboard" replace />} />
       </Routes>
     </BrowserRouter>
     </AuthProvider>

@@ -16,6 +16,10 @@ env/
 
 # SQLite database
 backend/plp_alumni.db
+plp_alumni.db
+*.db
+*.db-journal
+*.sqlite
 
 # Uploads
 backend/uploads/

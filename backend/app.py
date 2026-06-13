@@ -15,17 +15,22 @@ from routes.companies import companies_bp
 from routes.notifications import notifs_bp
 from routes.feedback import feedback_bp
 from routes.admin import admin_bp
+from routes.company import company_bp
 
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
-    # CORS — allow the Vite dev server
-    CORS(app, resources={r"/api/*": {"origins": [
+    # CORS — allow dev server and production Vercel domains
+    allowed_origins = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-    ]}}, supports_credentials=True)
+        os.environ.get("FRONTEND_URL", ""),
+    ]
+    # Allow all Vercel preview/production URLs for this project
+    CORS(app, resources={r"/api/*": {"origins": [o for o in allowed_origins if o]}},
+         supports_credentials=True)
 
     JWTManager(app)
 
@@ -40,6 +45,7 @@ def create_app():
     app.register_blueprint(notifs_bp,    url_prefix='/api/notifications')
     app.register_blueprint(feedback_bp,  url_prefix='/api/feedback')
     app.register_blueprint(admin_bp,     url_prefix='/api/admin')
+    app.register_blueprint(company_bp,   url_prefix='/api/company')
 
     @app.route('/api/health')
     def health():
@@ -48,19 +54,19 @@ def create_app():
     # Ensure upload folder exists
     os.makedirs(app.config.get('UPLOAD_FOLDER', 'uploads'), exist_ok=True)
 
+    # Init DB and seed on every startup (safe — seed uses INSERT OR IGNORE)
+    with app.app_context():
+        init_db()
+        try:
+            from seed import seed
+            seed()
+        except Exception as e:
+            print(f"Seed skipped: {e}")
+
     return app
 
 
 if __name__ == '__main__':
     app = create_app()
-
-    # Auto-init and seed on first run
-    init_db()
-    try:
-        from seed import seed
-        seed()
-    except Exception as e:
-        print(f"Seed skipped: {e}")
-
     print("PLP Alumni API running at http://localhost:5001")
-    app.run(debug=True, port=5001, host='0.0.0.0')
+    app.run(debug=True, use_reloader=False, port=5001, host='0.0.0.0')

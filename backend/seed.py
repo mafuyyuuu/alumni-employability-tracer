@@ -15,148 +15,26 @@ def seed():
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
 
-    # ── Users (insert per email — safe to re-run) ──────────────────────
-    users = [
-        ('Admin', '', 'PLP', 'admin@plp.edu.ph', hash_pw('admin123'), 'admin',
-         '', 2020, 30, 1, 'Active', 0, 0, 0, 0, 0, 0),
-        # BSCS
-        ('Juan', 'D.', 'Cruz', 'juan@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSCS', 2022, 25, 1, 'Active', 90.0, 88.0, 87.0, 91.0, 80.0, 63.0),
-        ('Carlos', '', 'Villanueva', 'carlos@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSCS', 2021, 26, 1, 'Active', 92.0, 90.0, 89.0, 93.0, 83.0, 68.0),
-        # BSIT
-        ('Maria', '', 'Santos', 'maria@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSIT', 2023, 23, 1, 'Active', 85.0, 84.0, 82.0, 88.0, 75.0, 70.0),
-        ('Ramon', '', 'Dela Cruz', 'ramon@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSIT', 2022, 24, 1, 'Active', 83.0, 81.0, 80.0, 85.0, 73.0, 67.0),
-        # BSEd
-        ('Pedro', '', 'Reyes', 'pedro@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSEd', 2021, 26, 0, 'Active', 78.0, 76.0, 77.0, 80.0, 72.0, 55.0),
-        ('Liza', '', 'Navarro', 'liza@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSEd', 2023, 23, 1, 'Active', 82.0, 80.0, 81.0, 84.0, 74.0, 57.0),
-        # BSBA
-        ('Ana', '', 'Gonzales', 'ana@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSBA', 2022, 25, 1, 'Active', 88.0, 85.0, 86.0, 89.0, 78.0, 60.0),
-        ('Sofia', '', 'Ramos', 'sofia@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSBA', 2023, 23, 1, 'Active', 86.0, 83.0, 84.0, 87.0, 76.0, 58.0),
-        # BSA
-        ('Jose', '', 'Mendoza', 'jose@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSA', 2020, 27, 0, 'Inactive', 72.0, 70.0, 71.0, 75.0, 65.0, 50.0),
-        ('Cris', '', 'Bautista', 'cris@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSA', 2022, 25, 1, 'Active', 84.0, 82.0, 83.0, 86.0, 75.0, 62.0),
-        # BSHM
-        ('Rosa', '', 'Aquino', 'rosa@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSHM', 2023, 23, 1, 'Active', 86.0, 84.0, 85.0, 87.0, 76.0, 62.0),
-        ('Marco', '', 'Ferrer', 'marco@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSHM', 2022, 24, 0, 'Active', 80.0, 78.0, 79.0, 82.0, 71.0, 58.0),
-        # BSN (College of Nursing)
-        ('Lea', '', 'Morales', 'lea@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSN', 2023, 23, 1, 'Active', 88.0, 86.0, 85.0, 89.0, 77.0, 65.0),
-        ('Nilo', '', 'Batungbakal', 'nilo@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSN', 2022, 24, 0, 'Active', 80.0, 78.0, 79.0, 82.0, 71.0, 58.0),
-        ('Grace', '', 'Tolentino', 'grace@plp.edu.ph', hash_pw('pass123'), 'alumni',
-         'BSN', 2021, 26, 1, 'Active', 85.0, 83.0, 84.0, 87.0, 74.0, 61.0),
-    ]
+    # ── Admin account only — alumni come from uploaded datasets ──────────
+    c.execute("SELECT id FROM users WHERE email = 'admin@plp.edu.ph'")
+    if not c.fetchone():
+        c.execute("""
+            INSERT INTO users (first_name, middle_name, last_name, email, password_hash,
+                role, course, graduation_year, age, employed, account_status,
+                avg_grade, avg_prof_grade, avg_elec_grade, ojt_grade, soft_skills, hard_skills,
+                months_to_employment)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, ('Admin', '', 'PLP', 'admin@plp.edu.ph', hash_pw('admin123'), 'admin',
+              '', 2020, 30, 1, 'Active', 0, 0, 0, 0, 0, 0, None))
 
-    for user in users:
-        c.execute("SELECT id FROM users WHERE email = ?", [user[3]])
-        if not c.fetchone():
-            c.execute("""
-                INSERT INTO users (first_name, middle_name, last_name, email, password_hash,
-                    role, course, graduation_year, age, employed, account_status,
-                    avg_grade, avg_prof_grade, avg_elec_grade, ojt_grade, soft_skills, hard_skills)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """, user)
-
-    # ── Companies ──────────────────────────────────────────────────────
-    companies = [
-        ('Facebook / Meta', 'Technology', 'Pasay', 'Large', 'Global social media company', 'Active'),
-        ('Jollibee Foods', 'F&B', 'Pasig City', 'Large', 'Leading fast food chain', 'Active'),
-        ('SM Retail', 'Retail', 'Pasig City', 'Large', 'Major retail conglomerate', 'Active'),
-        ('BDO Unibank', 'Banking', 'Makati', 'Large', 'Largest bank in the Philippines', 'Active'),
-        ('Accenture PH', 'IT Services', 'BGC', 'Large', 'Global consulting and IT services', 'Active'),
-        ('PLDT', 'Telecom', 'Makati', 'Large', 'Major telecommunications company', 'Inactive'),
-        ('Philippine General Hospital', 'Healthcare', 'Manila', 'Large', 'National tertiary government hospital', 'Active'),
-    ]
-
-    c.execute("SELECT COUNT(*) FROM companies")
-    if c.fetchone()[0] == 0:
-        c.executemany("""
+    # ── Accenture PH (needed for company login account) ──────────────
+    c.execute("SELECT id FROM companies WHERE name = 'Accenture PH'")
+    if not c.fetchone():
+        c.execute("""
             INSERT INTO companies (name, industry, location, size, description, status)
             VALUES (?,?,?,?,?,?)
-        """, companies)
+        """, ('Accenture PH', 'IT Services', 'BGC', 'Large', 'Global consulting and IT services', 'Active'))
 
-    # ── Jobs (with category for program-based matching) ───────────────
-    jobs = [
-        ('UI/UX Designer', 1, 'Facebook / Meta', 'Full-time', 'Pasay', '₱25,000–₱40,000/mo',
-         'Design user interfaces and create wireframes, prototypes, and high-fidelity mockups for web and mobile products. Conduct user research and usability testing. Collaborate closely with developers to bring designs to life.',
-         'IT & Software', 'Open'),
-        ('Web Developer', 1, 'Facebook / Meta', 'Part-time', 'Pasig City', '₱18,000–₱30,000/mo',
-         'Build and maintain responsive web applications using HTML, CSS, JavaScript, and React. Integrate REST APIs and ensure cross-browser compatibility. Experience with version control (Git) required.',
-         'IT & Software', 'Open'),
-        ('Data Analyst', 2, 'Jollibee Foods', 'Full-time', 'Quezon City', '₱20,000–₱35,000/mo',
-         'Analyze sales data, customer behavior, and operational metrics to support business decisions. Create dashboards using Excel and Tableau. Prepare weekly and monthly reports for management. SQL proficiency required.',
-         'IT & Software', 'Open'),
-        ('IT Support', 3, 'SM Retail', 'Contract', 'Pasig City', '₱15,000–₱20,000/mo',
-         'Provide Level 1 and Level 2 technical support to retail staff. Troubleshoot hardware, software, and network issues. Manage helpdesk tickets and escalate complex issues. Willing to work on shifting schedules.',
-         'IT & Networks', 'Open'),
-        ('Software Engineer', 5, 'Accenture PH', 'Full-time', 'BGC', '₱40,000–₱60,000/mo',
-         'Develop and maintain enterprise software solutions for international clients. Work with Java, Spring Boot, and React in an Agile environment. Participate in code reviews and contribute to architecture decisions.',
-         'IT & Software', 'Closed'),
-        ('Marketing Coordinator', 2, 'Jollibee Foods', 'Full-time', 'Ortigas', '₱22,000–₱32,000/mo',
-         'Support marketing campaigns for our iconic Filipino food brands. Create social media content, coordinate with agencies, and track campaign performance. Knowledge of digital marketing tools and analytics required.',
-         'Business & Management', 'Open'),
-        ('Accountant', 4, 'BDO Unibank', 'Full-time', 'BGC, Taguig', '₱25,000–₱40,000/mo',
-         'Handle general accounting duties including journal entries, bank reconciliation, and financial statement preparation. Ensure compliance with PFRS and BIR requirements. CPA board passers preferred.',
-         'Finance & Accounting', 'Open'),
-        ('Company Nurse', 7, 'Philippine General Hospital', 'Full-time', 'Manila', '₱25,000–₱38,000/mo',
-         'Provide healthcare services to hospital staff and patients. Conduct health assessments, administer first aid, manage medical records, and coordinate with occupational health programs. PRC-licensed RN required.',
-         'Healthcare & Nursing', 'Open'),
-        ('Hotel Operations Trainee', 3, 'SM Retail', 'Full-time', 'Pasay', '₱18,000–₱25,000/mo',
-         'Join our management trainee program covering front desk operations, housekeeping, and food and beverage service. Ideal for BSHM graduates seeking to build a hotel career. Willing to rotate across departments.',
-         'Hospitality & Tourism', 'Open'),
-        ('HR Assistant', 2, 'Jollibee Foods', 'Full-time', 'Ortigas', '₱20,000–₱28,000/mo',
-         'Support HR operations including recruitment, onboarding, payroll coordination, and employee records management. Knowledge of Philippine labor law and HRIS is an advantage. Detail-oriented with strong interpersonal skills.',
-         'Business & Management', 'Open'),
-    ]
-
-    c.execute("SELECT COUNT(*) FROM jobs")
-    if c.fetchone()[0] == 0:
-        c.executemany("""
-            INSERT INTO jobs (title, company_id, company_name, type, location, salary, description, category, status)
-            VALUES (?,?,?,?,?,?,?,?,?)
-        """, jobs)
-
-    # ── Employment data (historical) ───────────────────────────────────
-    emp_data = [
-        (2019, 58.2, 60.0, 56.0, 2910, 2090),
-        (2020, 52.1, 54.0, 50.0, 2605, 2395),
-        (2021, 61.4, 63.0, 59.0, 3070, 1930),
-        (2022, 65.8, 67.0, 64.0, 3290, 1710),
-        (2023, 69.6, 71.0, 68.0, 3480, 1520),
-    ]
-
-    c.execute("SELECT COUNT(*) FROM employment_data")
-    if c.fetchone()[0] == 0:
-        c.executemany("""
-            INSERT INTO employment_data (year, overall_rate, male_rate, female_rate, employed_count, unemployed_count)
-            VALUES (?,?,?,?,?,?)
-        """, emp_data)
-
-    # ── Program rates (per year+course — safe to re-run) ──────────────
-    prog_rates = [
-        (2023, 'BSCS', 82), (2023, 'BSIT', 78), (2023, 'BSBA', 74),
-        (2023, 'BSEd', 71), (2023, 'BSA', 68), (2023, 'BSHM', 65), (2023, 'BSN', 79),
-        (2022, 'BSCS', 79), (2022, 'BSIT', 75), (2022, 'BSBA', 71),
-        (2022, 'BSEd', 68), (2022, 'BSA', 65), (2022, 'BSHM', 62), (2022, 'BSN', 76),
-        (2021, 'BSCS', 74), (2021, 'BSIT', 70), (2021, 'BSBA', 66),
-        (2021, 'BSEd', 63), (2021, 'BSA', 60), (2021, 'BSHM', 58), (2021, 'BSN', 72),
-    ]
-
-    for rate in prog_rates:
-        c.execute("SELECT id FROM program_rates WHERE year = ? AND course = ?", [rate[0], rate[1]])
-        if not c.fetchone():
-            c.execute("INSERT INTO program_rates (year, course, rate) VALUES (?,?,?)", rate)
 
     # ── Voter config ──────────────────────────────────────────────────
     voter_fields = [
@@ -183,76 +61,210 @@ def seed():
             INSERT INTO prediction_settings (id, use_voter_weights) VALUES (1, 0)
         """)
 
-    # ── Reports ───────────────────────────────────────────────────────
-    reps = [
-        ('Employment Forecast Report 2024', 'PDF', '2019–2024', 'ARIMA (2,1,2)', 'Ready'),
-        ('Annual Graduate Outcomes 2023', 'Excel', '2019–2023', 'ARIMA (2,1,2)', 'Ready'),
-        ('ARIMA Model Accuracy Summary', 'PDF', '2019–2023', 'ARIMA (2,1,2)', 'Ready'),
-        ('Employment by Program (2019–2023)', 'Excel', '2019–2023', 'ARIMA (2,1,2)', 'Ready'),
+
+
+    # ── Voter config: add board_passer if missing ─────────────────────
+    c.execute("SELECT id FROM voter_config WHERE field_key = 'board_passer'")
+    if not c.fetchone():
+        c.execute("""
+            INSERT INTO voter_config (field_key, field_name, enabled, weight)
+            VALUES ('board_passer', 'Board/Licensure Passer', 1, 10)
+        """)
+
+    # ── Company accounts ──────────────────────────────────────────────
+    c.execute("SELECT id FROM companies WHERE name = 'Accenture PH'")
+    accenture = c.fetchone()
+    company_id = accenture[0] if accenture else None
+
+    c.execute("SELECT id FROM users WHERE email = 'company@accenture.ph'")
+    if not c.fetchone():
+        c.execute("""
+            INSERT INTO users (first_name, last_name, email, password_hash,
+                role, account_status, company_id)
+            VALUES (?,?,?,?,'company','Active',?)
+        """, ['Recruiter', 'Accenture', 'company@accenture.ph',
+              hash_pw('company123'), company_id])
+
+    # ── Programs (initial seed) ────────────────────────────────────────
+    default_programs = [
+        ('Bachelor of Science in Computer Science', 'BSCS', 0, '', ''),
+        ('Bachelor of Science in Information Technology', 'BSIT', 0, '', ''),
+        ('Bachelor of Science in Computer Engineering', 'BSCPE', 1, 'Electronics Engineering Licensure Exam', 'Combines hardware and software engineering.'),
+        ('Bachelor of Science in Electronics Engineering', 'BSECE', 1, 'Electronics Engineering Licensure Exam', ''),
+        ('Bachelor of Science in Civil Engineering', 'BSCE', 1, 'Civil Engineering Licensure Exam', ''),
+        ('Bachelor of Science in Nursing', 'BSN', 1, 'Nurse Licensure Examination', ''),
+        ('Bachelor of Secondary Education', 'BSEd', 1, 'Licensure Examination for Teachers', ''),
+        ('Bachelor of Elementary Education', 'BEEd', 1, 'Licensure Examination for Teachers', ''),
+        ('Bachelor of Science in Accountancy', 'BSA', 1, 'CPA Licensure Examination', ''),
+        ('Bachelor of Science in Business Administration', 'BSBA', 0, '', ''),
+        ('Bachelor of Science in Hotel and Restaurant Management', 'BSHM', 0, '', ''),
     ]
 
-    c.execute("SELECT COUNT(*) FROM reports")
-    if c.fetchone()[0] == 0:
-        c.executemany("""
-            INSERT INTO reports (name, type, year_range, model_name, status) VALUES (?,?,?,?,?)
-        """, reps)
+    for prog in default_programs:
+        c.execute("SELECT id FROM programs WHERE name = ?", [prog[0]])
+        if not c.fetchone():
+            c.execute("""
+                INSERT INTO programs (name, code, has_board_exam, board_exam_name, description, status)
+                VALUES (?,?,?,?,?,'Active')
+            """, prog)
 
-    # ── Model uploads ─────────────────────────────────────────────────
-    uploads = [
-        ('Employment Forecast Model v1', 'model2019-2024.csv', 485625, 2, 'Active'),
-        ('Employment Data 2019–2024', 'employment2019-2024.csv', 485625, 2, 'Active'),
-        ('ALCO Model 2019–2024', 'alco_model2019-2024.csv', 485625, 2, 'Active'),
+    # ── NCAE Questions (self-rating format) ──────────────────────────
+    # Detect old multiple-choice format by checking if option_a has real content
+    c.execute("SELECT COUNT(*) FROM ncae_questions WHERE length(option_a) > 3")
+    old_format_count = c.fetchone()[0]
+    if old_format_count > 0:
+        # Old MCQ format found — wipe and re-seed with new self-rating format
+        c.execute("DELETE FROM ncae_questions")
+        c.execute("DELETE FROM ncae_results")
+        print("Cleared old MCQ format NCAE questions. Re-seeding with self-rating format.")
+
+    c.execute("SELECT COUNT(*) FROM ncae_questions")
+    if c.fetchone()[0] == 0:
+        try:
+            from ncae_data import ALL_QUESTIONS
+            for program, questions in ALL_QUESTIONS.items():
+                for q in questions:
+                    c.execute("""
+                        INSERT OR IGNORE INTO ncae_questions
+                        (program, question_num, question, option_a, option_b, option_c, option_d, correct_answer, category)
+                        VALUES (?,?,?,?,?,?,?,?,?)
+                    """, [program, q['num'], q['statement'], '', '', '', '', '', q['category']])
+            print("NCAE self-rating questions seeded.")
+        except Exception as e:
+            print(f"NCAE seed skipped: {e}")
+
+    # ── Test alumni accounts ──────────────────────────────────────────────
+    test_alumni = [
+        ('Juan', 'Dela Cruz', 'BSCS', 'juan.delacruz@plp.edu.ph', 2023, 23),
+        ('Maria', 'Santos', 'BSIT', 'maria.santos@plp.edu.ph', 2023, 22),
+        ('Pedro', 'Reyes', 'BSA', 'pedro.reyes@plp.edu.ph', 2022, 24),
+        ('Ana', 'Garcia', 'BSN', 'ana.garcia@plp.edu.ph', 2023, 22),
+        ('Jose', 'Mendoza', 'BSBA', 'jose.mendoza@plp.edu.ph', 2022, 25),
     ]
+    for first, last, course, email, yr, age in test_alumni:
+        c.execute("SELECT id FROM users WHERE email = ?", [email])
+        if not c.fetchone():
+            c.execute("""
+                INSERT INTO users (first_name, last_name, course, email, password_hash,
+                    role, account_status, graduation_year, age, employed, ncae_completed,
+                    soft_skills, hard_skills, avg_grade, board_passer, is_test_account)
+                VALUES (?,?,?,?,?,'alumni','Active',?,?,1,1,75,75,85,0,1)
+            """, (first, last, course, email, hash_pw('pass123'), yr, age))
+        else:
+            c.execute("UPDATE users SET is_test_account=1 WHERE email=?", [email])
 
-    c.execute("SELECT COUNT(*) FROM model_uploads")
-    if c.fetchone()[0] == 0:
-        c.executemany("""
-            INSERT INTO model_uploads (name, original_filename, file_size, records, status) VALUES (?,?,?,?,?)
-        """, uploads)
+    # ── Demo account for NCAE questionnaire testing ──────────────────────
+    c.execute("SELECT id FROM users WHERE email = 'demo.alumni@plp.edu.ph'")
+    if not c.fetchone():
+        c.execute("""
+            INSERT INTO users (first_name, last_name, course, email, password_hash,
+                role, account_status, graduation_year, age, employed, ncae_completed,
+                soft_skills, hard_skills, avg_grade, board_passer, is_test_account)
+            VALUES (?,?,?,?,?,'alumni','Active',2024,22,0,0,0,0,0,0,1)
+        """, ('Demo', 'Alumni', 'BSCS', 'demo.alumni@plp.edu.ph', hash_pw('demo123')))
+    else:
+        c.execute("UPDATE users SET is_test_account=1, ncae_completed=0 WHERE email='demo.alumni@plp.edu.ph'")
 
-    # ── Notifications ─────────────────────────────────────────────────
-    c.execute("SELECT id FROM users WHERE email = 'juan@plp.edu.ph'")
-    juan = c.fetchone()
-    if juan:
-        uid = juan[0]
-        c.execute("SELECT COUNT(*) FROM notifications WHERE user_id = ?", [uid])
-        if c.fetchone()[0] == 0:
-            notifs = [
-                (uid, 'New Job Match', 'A UI/UX Designer role at Facebook matches your profile!', 0),
-                (uid, 'Profile Reminder', 'Complete your profile to improve job recommendations.', 0),
-                (uid, 'Welcome to PLP Alumni Portal', 'Start exploring job opportunities matched to your degree.', 1),
-            ]
-            c.executemany("""
-                INSERT INTO notifications (user_id, title, message, is_read) VALUES (?,?,?,?)
-            """, notifs)
+    # ── Preview accounts: 2 per program, ncae_completed=1 (no evaluation) ──
+    # Excluded from frontend lists and training data via is_test_account=1.
+    # Password: preview123
+    preview_alumni = [
+        # first, last, course, email, grad_year, age, avg_grade, ojt_grade, soft_skills, hard_skills, board_passer, employed
+        ('Alex',    'Reyes',      'BSCS',  'bscs.1@plp.edu.ph',  2023, 23, 90, 92, 85, 82, 0, 1),
+        ('Jordan',  'Santos',     'BSCS',  'bscs.2@plp.edu.ph',  2024, 22, 78, 76, 70, 68, 0, 0),
+        ('Morgan',  'Cruz',       'BSIT',  'bsit.1@plp.edu.ph',  2023, 23, 88, 90, 83, 80, 0, 1),
+        ('Riley',   'Lim',        'BSIT',  'bsit.2@plp.edu.ph',  2024, 22, 76, 74, 68, 65, 0, 0),
+        ('Casey',   'Garcia',     'BSCPE', 'bscpe.1@plp.edu.ph', 2023, 23, 89, 91, 84, 81, 1, 1),
+        ('Jamie',   'Torres',     'BSCPE', 'bscpe.2@plp.edu.ph', 2024, 22, 77, 75, 69, 66, 0, 0),
+        ('Drew',    'Flores',     'BSECE', 'bsece.1@plp.edu.ph', 2023, 23, 87, 89, 82, 79, 1, 1),
+        ('Taylor',  'Ramos',      'BSECE', 'bsece.2@plp.edu.ph', 2024, 22, 75, 73, 67, 64, 0, 0),
+        ('Quinn',   'Dela Cruz',  'BSCE',  'bsce.1@plp.edu.ph',  2023, 24, 91, 93, 86, 83, 1, 1),
+        ('Avery',   'Mendoza',    'BSCE',  'bsce.2@plp.edu.ph',  2024, 22, 79, 77, 71, 69, 0, 0),
+        ('Sky',     'Aquino',     'BSN',   'bsn.1@plp.edu.ph',   2023, 23, 92, 94, 87, 84, 1, 1),
+        ('Lane',    'Bautista',   'BSN',   'bsn.2@plp.edu.ph',   2024, 22, 80, 78, 72, 70, 0, 0),
+        ('Logan',   'Castillo',   'BSEd',  'bsed.1@plp.edu.ph',  2023, 24, 88, 90, 83, 80, 1, 1),
+        ('Robin',   'Villanueva', 'BSEd',  'bsed.2@plp.edu.ph',  2024, 23, 76, 74, 68, 65, 0, 0),
+        ('Blair',   'Navarro',    'BEEd',  'beed.1@plp.edu.ph',  2023, 24, 87, 89, 82, 79, 1, 1),
+        ('Parker',  'Fernandez',  'BEEd',  'beed.2@plp.edu.ph',  2024, 23, 75, 73, 67, 64, 0, 0),
+        ('Reese',   'Pascual',    'BSA',   'bsa.1@plp.edu.ph',   2023, 24, 90, 92, 85, 82, 1, 1),
+        ('Avery',   'Guevarra',   'BSA',   'bsa.2@plp.edu.ph',   2024, 23, 77, 75, 69, 66, 0, 0),
+        ('Harper',  'Magno',      'BSBA',  'bsba.1@plp.edu.ph',  2023, 24, 86, 88, 81, 78, 0, 1),
+        ('Spencer', 'Dizon',      'BSBA',  'bsba.2@plp.edu.ph',  2024, 23, 74, 72, 66, 63, 0, 0),
+        ('Sage',    'Pineda',     'BSHM',  'bshm.1@plp.edu.ph',  2023, 24, 85, 87, 80, 77, 0, 1),
+        ('River',   'Tolentino',  'BSHM',  'bshm.2@plp.edu.ph',  2024, 23, 73, 71, 65, 62, 0, 0),
+    ]
+    for first, last, course, email, yr, age, avg_grade, ojt_grade, ss, hs, bp, emp in preview_alumni:
+        c.execute("SELECT id FROM users WHERE email = ?", [email])
+        if not c.fetchone():
+            c.execute("""
+                INSERT INTO users (first_name, last_name, course, email, password_hash,
+                    role, account_status, graduation_year, age, employed, ncae_completed,
+                    soft_skills, hard_skills, avg_grade, board_passer, is_test_account)
+                VALUES (?,?,?,?,?,'alumni','Active',?,?,?,1,?,?,?,?,1)
+            """, (first, last, course, email, hash_pw('preview123'),
+                  yr, age, emp, ss, hs, avg_grade, bp))
+        else:
+            c.execute(
+                "UPDATE users SET is_test_account=1, ncae_completed=1 WHERE email=?", [email])
 
-    # ── Feedbacks ─────────────────────────────────────────────────────
-    c.execute("SELECT COUNT(*) FROM feedbacks")
-    if c.fetchone()[0] == 0:
-        c.execute("SELECT id FROM users WHERE email = 'juan@plp.edu.ph'")
-        u1 = c.fetchone()
-        c.execute("SELECT id FROM users WHERE email = 'maria@plp.edu.ph'")
-        u2 = c.fetchone()
-        c.execute("SELECT id FROM users WHERE email = 'pedro@plp.edu.ph'")
-        u3 = c.fetchone()
-        c.execute("SELECT id FROM users WHERE email = 'ana@plp.edu.ph'")
-        u4 = c.fetchone()
-        c.execute("SELECT id FROM users WHERE email = 'rosa@plp.edu.ph'")
-        u5 = c.fetchone()
-        c.execute("SELECT id FROM users WHERE email = 'lea@plp.edu.ph'")
-        u6 = c.fetchone()
-        feedback_data = []
-        if u1: feedback_data.append((u1[0], 'hired', 'Facebook', 'Frontend Dev', '1 year', 'Remote', 'Full-time'))
-        if u2: feedback_data.append((u2[0], 'elsewhere', 'SM Retail', 'IT Support', '6 months', 'On-site', 'Full-time'))
-        if u3: feedback_data.append((u3[0], 'looking', '', '', '', '', ''))
-        if u4: feedback_data.append((u4[0], 'hired', 'BDO Unibank', 'Bank Teller', '2 years', 'On-site', 'Full-time'))
-        if u5: feedback_data.append((u5[0], 'elsewhere', 'Jollibee', 'Shift Manager', '8 months', 'On-site', 'Full-time'))
-        if u6: feedback_data.append((u6[0], 'hired', 'Philippine General Hospital', 'Staff Nurse', '1 year', 'On-site', 'Full-time'))
-        if feedback_data:
-            c.executemany("""
-                INSERT INTO feedbacks (user_id, employment_status, company, position, duration, work_setup, employment_type)
-                VALUES (?,?,?,?,?,?,?)
-            """, feedback_data)
+    # ── Second demo account: ncae_completed=0 (evaluation required) ──────────
+    # Password: demo123  |  Program: BSN (different from demo.alumni which is BSCS)
+    c.execute("SELECT id FROM users WHERE email = 'demo2.alumni@plp.edu.ph'")
+    if not c.fetchone():
+        c.execute("""
+            INSERT INTO users (first_name, last_name, course, email, password_hash,
+                role, account_status, graduation_year, age, employed, ncae_completed,
+                soft_skills, hard_skills, avg_grade, board_passer, is_test_account)
+            VALUES (?,?,?,?,?,'alumni','Active',2024,22,0,0,0,0,0,0,1)
+        """, ('Demo', 'Two', 'BSN', 'demo2.alumni@plp.edu.ph', hash_pw('demo123')))
+    else:
+        c.execute(
+            "UPDATE users SET is_test_account=1, ncae_completed=0 WHERE email='demo2.alumni@plp.edu.ph'")
+
+    # ── Fill pending skills from ml_training_rows averages ───────────────
+    # For alumni who haven't completed NCAE and have no skills data,
+    # fill soft_skills and hard_skills using program/year averages from training data.
+    c.execute("""
+        SELECT u.id, u.course, u.graduation_year
+        FROM users u
+        WHERE u.role = 'alumni'
+          AND (u.ncae_completed = 0 OR u.ncae_completed IS NULL)
+          AND (u.soft_skills = 0 OR u.soft_skills IS NULL)
+          AND (u.hard_skills = 0 OR u.hard_skills IS NULL)
+    """)
+    pending_users = c.fetchall()
+
+    filled = 0
+    for pu in pending_users:
+        uid, course, grad_year = pu[0], pu[1], pu[2]
+        # Try exact match first (same course + year), then just course
+        c.execute("""
+            SELECT AVG(soft_skills) AS avg_soft, AVG(hard_skills) AS avg_hard
+            FROM ml_training_rows
+            WHERE is_active = 1 AND course = ? AND graduation_year = ?
+        """, [course, grad_year])
+        row = c.fetchone()
+        avg_soft = row[0]
+        avg_hard = row[1]
+
+        if avg_soft is None:
+            # Fall back to course-wide average
+            c.execute("""
+                SELECT AVG(soft_skills) AS avg_soft, AVG(hard_skills) AS avg_hard
+                FROM ml_training_rows WHERE is_active = 1 AND course = ?
+            """, [course])
+            row = c.fetchone()
+            avg_soft = row[0]
+            avg_hard = row[1]
+
+        if avg_soft is not None and avg_hard is not None:
+            c.execute("""
+                UPDATE users SET soft_skills = ?, hard_skills = ? WHERE id = ?
+            """, [round(float(avg_soft), 2), round(float(avg_hard), 2), uid])
+            filled += 1
+
+    if filled > 0:
+        print(f"Filled skills data for {filled} pending alumni from dataset averages.")
 
     conn.commit()
     conn.close()

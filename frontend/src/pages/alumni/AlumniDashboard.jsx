@@ -54,7 +54,7 @@ export default function AlumniDashboard() {
             {[
               { icon: MdBookmark,      label: 'Saved Jobs',    value: stats.saved_jobs_count,    route: '/alumni/saved-jobs' },
               { icon: MdNotifications, label: 'Notifications', value: stats.notifications_count, route: '/alumni/notifications' },
-              { icon: MdTrendingUp,    label: 'Profile Match', value: '—',                       route: '/alumni/profile-settings' },
+              { icon: MdTrendingUp,    label: 'Profile Match', value: 'View',                     route: '/alumni/profile-settings' },
             ].map(({ icon: Icon, label, value, route }) => (
               <button
                 key={label}

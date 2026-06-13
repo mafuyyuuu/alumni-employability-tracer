@@ -1,14 +1,15 @@
 import csv
 import os
+import re
 import sqlite3
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
-
+# graduation_year can be omitted when year_override is passed to import_training_csv
 REQUIRED_COLUMNS = [
     'course',
-    'graduation_year',
     'GWA',
     'capstone_grade',
     'soft_skills_avg',
@@ -16,35 +17,90 @@ REQUIRED_COLUMNS = [
     'employment_status',
 ]
 
-SKILL_COLUMNS = [
-    'Teaching_skill',
-    'Math_skill',
-    'HTML_skill',
-    'JavaScript_skill',
-    'PHP_skill',
-    'MySQL_skill',
-    'AutoCAD_skill',
-    'EngineeringDesign_skill',
-    'Communication_skill',
-    'Python_skill',
-    'MachineLearning_skill',
-    'Taxation_skill',
-    'Construction_skill',
-    'DataAnalysis_skill',
-    'Excel_skill',
-    'Accounting_skill',
-    'Auditing_skill',
-    'SQL_skill',
-    'Database_skill',
-    'Marketing_skill',
-    'Sales_skill',
-    'Java_skill',
-    'Algorithms_skill',
-    'SystemsAnalysis_skill',
-    'Networking_skill',
-    'Cybersecurity_skill',
-    'Finance_skill',
-]
+# Maps alternate column names (lowercase) → canonical name
+COLUMN_ALIASES = {
+    # name
+    'name':                     'name',
+    'full_name':                'name',
+    'alumni_name':              'name',
+    # email
+    'email':                    'email',
+    'email_address':            'email',
+    # course / program
+    'program':                  'course',
+    # graduation year
+    'jr_grad':                  'graduation_year',
+    'grad_year':                'graduation_year',
+    'year_graduated':           'graduation_year',
+    'graduation year':          'graduation_year',
+    # GWA / GPA
+    'cgpa':                     'GWA',
+    'gpa':                      'GWA',
+    'general_weighted_average': 'GWA',
+    'general_average':          'GWA',
+    'gwa':                      'GWA',
+    # capstone / professional grade
+    'prof_grade':               'capstone_grade',
+    'avg_prof_grade':           'capstone_grade',
+    'professional_grade':       'capstone_grade',
+    'thesis_grade':             'capstone_grade',
+    'capstone':                 'capstone_grade',
+    # soft skills
+    'soft_skills':              'soft_skills_avg',
+    'soft_skill':               'soft_skills_avg',
+    'softskills':               'soft_skills_avg',
+    # hard skills
+    'hard_skills':              'hard_skills_avg',
+    'hard_skill':               'hard_skills_avg',
+    'hardskills':               'hard_skills_avg',
+    # employment status
+    'employed':                 'employment_status',
+    'employment':               'employment_status',
+    'employedstatus':           'employment_status',
+    'is_employed':              'employment_status',
+    'status':                   'employment_status',
+    # board passer
+    'board_passer':             'board_passer',
+    'boardpasser':              'board_passer',
+    'board_exam_passer':        'board_passer',
+    'licensure_passer':         'board_passer',
+}
+
+# Course normalisation — maps non-standard names to canonical codes
+COURSE_ALIASES = {
+    'BS ENTREP':         'BSENTREP',
+    'BS ENTREPRENEUR':   'BSENTREP',
+    'BSENTREP':          'BSENTREP',
+    'BSED MATH':         'BSED',
+    'BSED ENGLISH':      'BSED',
+    'BSED FILIPINO':     'BSED',
+    'BSED SCIENCE':      'BSED',
+    'BSED MAPEH':        'BSED',
+    'AB PSYCH':          'PSYCHOLOGY',
+    'AB PSYCHOLOGY':     'PSYCHOLOGY',
+    'ABPSYCH':           'PSYCHOLOGY',
+    'BS PSYCHOLOGY':     'PSYCHOLOGY',
+}
+
+
+def _normalize_columns(reader_fieldnames):
+    """Return a mapping old_name→canonical_name for any aliased headers."""
+    mapping = {}
+    for col in (reader_fieldnames or []):
+        alias = col.strip().lower().replace(' ', '_')
+        if alias in COLUMN_ALIASES:
+            mapping[col] = COLUMN_ALIASES[alias]
+    return mapping
+
+
+def _apply_column_mapping(row, mapping):
+    """Rename keys in a CSV row dict according to mapping."""
+    if not mapping:
+        return row
+    result = {}
+    for k, v in row.items():
+        result[mapping.get(k, k)] = v
+    return result
 
 
 def _to_float(value, default=0.0):
@@ -67,7 +123,32 @@ def _clamp(value, lo, hi):
 
 def _normalize_course(value):
     text = str(value or '').strip().upper()
-    return text if text else 'UNKNOWN'
+    if not text:
+        return 'UNKNOWN'
+    return COURSE_ALIASES.get(text, text)
+
+
+def _skills_to_percent(value):
+    """Convert a skills score to 0-100 scale.
+    Accepts GWA 1.0-5.0 scale (converts via _gwa_to_grade) or
+    a direct 0-100 percentage. Zero means 'not set'."""
+    v = _to_float(value, 0.0)
+    if v == 0.0:
+        return 0.0
+    if 1.0 <= v <= 5.0:
+        return _gwa_to_grade(v)
+    return _clamp(v, 0.0, 100.0)
+
+
+def _find_skill_columns(row_keys):
+    """Dynamically find all skill columns — any key ending with 'skill' or 'skills'
+    (case-insensitive, handles both 'Teaching_skill' and 'Teaching Skills')."""
+    result = []
+    for key in row_keys:
+        k = key.strip().lower().rstrip('s')  # strip trailing 's' → 'skill'
+        if k.endswith('skill'):
+            result.append(key)
+    return result
 
 
 def _parse_employed(value):
@@ -92,53 +173,85 @@ def _gwa_to_grade(value):
     return _clamp(grade, 55.0, 100.0)
 
 
+def _auto_grade(value, default=75.0):
+    """Auto-detect GWA (1–5 scale) vs percentage (>5) and convert to 0–100."""
+    v = _to_float(value, None)
+    if v is None:
+        return float(default)
+    if 1.0 <= v <= 5.0:
+        return _gwa_to_grade(v)
+    return _clamp(v, 0.0, 100.0)
+
+
 def _derive_age(graduation_year, current_year):
     years_since_grad = max(0, current_year - graduation_year)
     return int(_clamp(22 + years_since_grad, 20, 45))
 
 
 def _derive_elective_grade(row, soft_skills, hard_skills):
+    skill_keys = _find_skill_columns(list(row.keys()))
     values = []
-    for key in SKILL_COLUMNS:
-        raw = (row.get(key) or '').strip()
-        if raw == '':
+    for key in skill_keys:
+        raw = str(row.get(key) or '').strip()
+        if raw in ('', 'nan', 'NaN', 'None'):
             continue
-        values.append(_to_float(raw))
+        v = _to_float(raw, None)
+        if v is not None:
+            values.append(_skills_to_percent(v))
     if values:
         return _clamp(sum(values) / len(values), 50.0, 100.0)
     return _clamp((soft_skills + hard_skills) / 2.0, 50.0, 100.0)
 
 
 def _derive_ojt_grade(prof_grade, internship_experience, internship_duration_months):
+    dur = _to_float(internship_duration_months, 0.0)
+    # Values > 12 are OJT grades (0-100 scale), not duration in months
+    if dur > 12:
+        return _clamp(dur, 55.0, 100.0)
     score = _to_float(prof_grade, 75.0)
     if internship_experience >= 1:
         score += 4.0
-    score += _clamp(internship_duration_months, 0.0, 6.0) * 1.2
+    score += _clamp(dur, 0.0, 6.0) * 1.2
     return _clamp(score, 55.0, 100.0)
 
 
-def _map_row(row, source_row_id, current_year):
+def _map_row(row, source_row_id, current_year, year_override=None):
     course = _normalize_course(row.get('course'))
-    graduation_year = _to_int(row.get('graduation_year'), 0)
+    name = str(row.get('name') or row.get('Name') or '').strip()
+    email = str(row.get('email') or row.get('Email') or '').strip()
+
+    # graduation_year: explicit column → year_override → alumni_id embedded year
+    raw_year = row.get('graduation_year') or row.get('jr_grad') or ''
+    graduation_year = _to_int(raw_year, 0)
+    if graduation_year <= 0 and year_override:
+        graduation_year = int(year_override)
     if graduation_year <= 0:
-        return None, f"row {source_row_id}: invalid graduation_year"
+        alumni_id = str(row.get('alumni_id') or '').strip()
+        m = re.search(r'\b(20\d{2})\b', alumni_id)
+        if m:
+            graduation_year = int(m.group(1))
+    if graduation_year <= 0:
+        return None, f"row {source_row_id}: missing graduation_year (provide dataset_year when uploading)"
 
     employed = _parse_employed(row.get('employment_status'))
     if employed is None:
         return None, f"row {source_row_id}: invalid employment_status"
 
-    avg_grade = _gwa_to_grade(row.get('GWA'))
-    avg_prof_grade = _gwa_to_grade(row.get('capstone_grade'))
-    soft_skills = _clamp(_to_float(row.get('soft_skills_avg'), 0.0), 0.0, 100.0)
-    hard_skills = _clamp(_to_float(row.get('hard_skills_avg'), 0.0), 0.0, 100.0)
+    avg_grade      = _gwa_to_grade(row.get('GWA'))
+    avg_prof_grade = _auto_grade(row.get('capstone_grade'))
+    soft_skills   = _skills_to_percent(row.get('soft_skills_avg', 0))
+    hard_skills   = _skills_to_percent(row.get('hard_skills_avg', 0))
     avg_elec_grade = _derive_elective_grade(row, soft_skills, hard_skills)
-    internship_experience = _to_int(row.get('internship_experience'), 0)
-    internship_duration = _to_float(row.get('internship_duration_months'), 0.0)
+    internship_experience  = _to_int(row.get('internship_experience'), 0)
+    internship_duration    = _to_float(row.get('internship_duration_months'), 0.0)
     ojt_grade = _derive_ojt_grade(avg_prof_grade, internship_experience, internship_duration)
     age = _derive_age(graduation_year, current_year)
+    board_passer = 1 if _to_int(row.get('board_passer', 0), 0) >= 1 else 0
 
     return {
         'source_row_id': str(source_row_id),
+        'name': name,
+        'email': email,
         'course': course,
         'graduation_year': int(graduation_year),
         'age': int(age),
@@ -148,15 +261,19 @@ def _map_row(row, source_row_id, current_year):
         'ojt_grade': float(ojt_grade),
         'soft_skills': float(soft_skills),
         'hard_skills': float(hard_skills),
+        'board_passer': board_passer,
         'employed': int(employed),
     }, None
 
 
 def _validate_required_columns(columns):
-    missing = [col for col in REQUIRED_COLUMNS if col not in columns]
+    _validate_required_columns_list(columns, REQUIRED_COLUMNS)
+
+
+def _validate_required_columns_list(columns, required):
+    missing = [col for col in required if col not in columns]
     if missing:
-        missing_str = ', '.join(missing)
-        raise ValueError(f"Dataset is missing required columns: {missing_str}")
+        raise ValueError(f"Dataset is missing required columns: {', '.join(missing)}")
 
 
 def _ensure_ml_training_table(conn):
@@ -165,6 +282,8 @@ def _ensure_ml_training_table(conn):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             source_name TEXT NOT NULL,
             source_row_id TEXT NOT NULL,
+            name TEXT DEFAULT '',
+            email TEXT DEFAULT '',
             course TEXT NOT NULL,
             graduation_year INTEGER NOT NULL,
             age INTEGER NOT NULL,
@@ -174,12 +293,29 @@ def _ensure_ml_training_table(conn):
             ojt_grade REAL NOT NULL,
             soft_skills REAL NOT NULL,
             hard_skills REAL NOT NULL,
+            board_passer INTEGER DEFAULT 0,
+            board_exam_score REAL DEFAULT 0,
+            months_to_employment INTEGER DEFAULT NULL,
             employed INTEGER NOT NULL,
             is_active INTEGER DEFAULT 1,
             imported_at TEXT DEFAULT (datetime('now')),
             UNIQUE(source_name, source_row_id)
         )
     """)
+    # Migrations for existing tables
+    migrations = [
+        "ALTER TABLE ml_training_rows ADD COLUMN name TEXT DEFAULT ''",
+        "ALTER TABLE ml_training_rows ADD COLUMN email TEXT DEFAULT ''",
+        "ALTER TABLE ml_training_rows ADD COLUMN board_passer INTEGER DEFAULT 0",
+        "ALTER TABLE ml_training_rows ADD COLUMN board_exam_score REAL DEFAULT 0",
+        "ALTER TABLE ml_training_rows ADD COLUMN months_to_employment INTEGER DEFAULT NULL",
+    ]
+    for m in migrations:
+        try:
+            conn.execute(m)
+        except Exception:
+            pass  # Column already exists
+
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_ml_training_rows_active
         ON ml_training_rows (is_active, source_name)
@@ -187,9 +323,11 @@ def _ensure_ml_training_table(conn):
 
 
 def import_training_csv(
-    database_path: str | None = None,
-    csv_path: str | None = None,
-    source_name: str | None = None,
+    database_path: Optional[str] = None,
+    csv_path: Optional[str] = None,
+    source_name: Optional[str] = None,
+    year_override: Optional[int] = None,
+    progress_callback=None,
 ) -> dict:
     db_path = database_path or os.getenv('DATABASE', 'plp_alumni.db')
     dataset_path = Path(csv_path) if csv_path else Path(__file__).resolve().parent / 'data' / 'first_clean_dataset.csv'
@@ -203,72 +341,91 @@ def import_training_csv(
     skipped_rows = 0
     skip_reasons = Counter()
 
-    with dataset_path.open('r', encoding='utf-8-sig', newline='') as f:
-        reader = csv.DictReader(f)
-        columns = reader.fieldnames or []
-        _validate_required_columns(columns)
-        records = list(reader)
+    ext = dataset_path.suffix.lower()
+    if ext in ('.xlsx', '.xls'):
+        try:
+            import pandas as pd
+            df = pd.read_excel(dataset_path, dtype=str)
+            df = df.fillna('')
+            # Replace literal 'nan'/'NaT' strings left over from mixed types
+            df = df.replace({'nan': '', 'NaT': ''})
+            raw_columns = list(df.columns)
+            col_mapping = _normalize_columns(raw_columns)
+            # Rename columns in bulk — much faster than iterrows
+            df.columns = [col_mapping.get(c, c) for c in raw_columns]
+            normalized_columns = list(df.columns)
+            records = df.to_dict(orient='records')
+        except ImportError:
+            raise ValueError("pandas/openpyxl required to import Excel files. Run: pip install openpyxl")
+    else:
+        with dataset_path.open('r', encoding='utf-8-sig', newline='') as f:
+            reader = csv.DictReader(f)
+            raw_columns = reader.fieldnames or []
+            col_mapping = _normalize_columns(raw_columns)
+            normalized_columns = [col_mapping.get(c, c) for c in raw_columns]
+            records = [_apply_column_mapping(row, col_mapping) for row in reader]
 
-    conn = sqlite3.connect(db_path)
+    # graduation_year is optional when year_override is supplied
+    required = [c for c in REQUIRED_COLUMNS if not (c == 'graduation_year' and year_override)]
+    _validate_required_columns_list(normalized_columns, required)
+
+    conn = sqlite3.connect(db_path, timeout=30)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout = 30000")
     try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
         _ensure_ml_training_table(conn)
         conn.execute("UPDATE ml_training_rows SET is_active = 0 WHERE source_name = ?", [source])
+
+        # Build all rows first, then insert in one batch
+        total_count = len(records)
+        batch = []
         for line_num, row in enumerate(records, start=2):
             total_rows += 1
             source_row_id = (row.get('alumni_id') or '').strip() or str(line_num)
-            mapped, reason = _map_row(row, source_row_id, current_year)
+            mapped, reason = _map_row(row, source_row_id, current_year, year_override=year_override)
             if not mapped:
                 skipped_rows += 1
                 skip_reasons[reason] += 1
-                continue
+            else:
+                batch.append([
+                    source,
+                    mapped['source_row_id'],
+                    mapped['name'],
+                    mapped['email'],
+                    mapped['course'],
+                    mapped['graduation_year'],
+                    mapped['age'],
+                    mapped['avg_grade'],
+                    mapped['avg_prof_grade'],
+                    mapped['avg_elec_grade'],
+                    mapped['ojt_grade'],
+                    mapped['soft_skills'],
+                    mapped['hard_skills'],
+                    mapped.get('board_passer', 0),
+                    mapped['employed'],
+                ])
+                imported_rows += 1
+            if progress_callback and total_count > 0:
+                progress_callback(total_rows, total_count)
 
-            conn.execute("""
-                INSERT INTO ml_training_rows (
-                    source_name,
-                    source_row_id,
-                    course,
-                    graduation_year,
-                    age,
-                    avg_grade,
-                    avg_prof_grade,
-                    avg_elec_grade,
-                    ojt_grade,
-                    soft_skills,
-                    hard_skills,
-                    employed,
-                    is_active,
-                    imported_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'))
-                ON CONFLICT(source_name, source_row_id) DO UPDATE SET
-                    course = excluded.course,
-                    graduation_year = excluded.graduation_year,
-                    age = excluded.age,
-                    avg_grade = excluded.avg_grade,
-                    avg_prof_grade = excluded.avg_prof_grade,
-                    avg_elec_grade = excluded.avg_elec_grade,
-                    ojt_grade = excluded.ojt_grade,
-                    soft_skills = excluded.soft_skills,
-                    hard_skills = excluded.hard_skills,
-                    employed = excluded.employed,
-                    is_active = 1,
-                    imported_at = datetime('now')
-            """, [
-                source,
-                mapped['source_row_id'],
-                mapped['course'],
-                mapped['graduation_year'],
-                mapped['age'],
-                mapped['avg_grade'],
-                mapped['avg_prof_grade'],
-                mapped['avg_elec_grade'],
-                mapped['ojt_grade'],
-                mapped['soft_skills'],
-                mapped['hard_skills'],
-                mapped['employed'],
-            ])
-            imported_rows += 1
-
+        conn.executemany("""
+            INSERT INTO ml_training_rows (
+                source_name, source_row_id, name, email, course,
+                graduation_year, age, avg_grade, avg_prof_grade, avg_elec_grade,
+                ojt_grade, soft_skills, hard_skills, board_passer, employed, is_active, imported_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'))
+            ON CONFLICT(source_name, source_row_id) DO UPDATE SET
+                name = excluded.name, email = excluded.email, course = excluded.course,
+                graduation_year = excluded.graduation_year, age = excluded.age,
+                avg_grade = excluded.avg_grade, avg_prof_grade = excluded.avg_prof_grade,
+                avg_elec_grade = excluded.avg_elec_grade, ojt_grade = excluded.ojt_grade,
+                soft_skills = excluded.soft_skills, hard_skills = excluded.hard_skills,
+                board_passer = excluded.board_passer,
+                employed = excluded.employed, is_active = 1, imported_at = datetime('now')
+        """, batch)
         conn.commit()
 
         source_active_rows = conn.execute(
@@ -299,8 +456,8 @@ def import_training_csv(
 
 
 def import_first_clean_dataset(
-    database_path: str | None = None,
-    csv_path: str | None = None,
+    database_path: Optional[str] = None,
+    csv_path: Optional[str] = None,
     source_name: str = 'first_clean_dataset.csv',
 ) -> dict:
     """Backward-compatible wrapper for legacy first_clean_dataset imports."""

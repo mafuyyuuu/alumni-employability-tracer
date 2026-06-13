@@ -8,7 +8,6 @@ import pandas as pd
 warnings.filterwarnings("ignore")
 
 NUMERIC_INPUT_FIELDS = [
-    'age',
     'graduation_year',
     'avg_grade',
     'avg_prof_grade',
@@ -16,13 +15,12 @@ NUMERIC_INPUT_FIELDS = [
     'ojt_grade',
     'soft_skills',
     'hard_skills',
+    'board_passer',
+    'board_exam_score',
 ]
-
 INPUT_ALIASES = {
     'degree': 'course',
     'course': 'course',
-    'age': 'age',
-    'graduationYear': 'graduation_year',
     'graduation_year': 'graduation_year',
     'year_graduated': 'graduation_year',
     'avgGrade': 'avg_grade',
@@ -37,7 +35,36 @@ INPUT_ALIASES = {
     'soft_skills': 'soft_skills',
     'hardSkills': 'hard_skills',
     'hard_skills': 'hard_skills',
+    'board_passer': 'board_passer',
+    'boardPasser': 'board_passer',
+    'board_exam_score': 'board_exam_score',
+    'boardExamScore': 'board_exam_score',
 }
+
+# Programs that typically require board exams
+BOARD_PROGRAMS = {'BSN', 'BSCE', 'BSECE', 'BSEE', 'BSME', 'BSEd', 'BEEd', 'BSA', 'BSCPE'}
+
+
+def _sanitize_input(raw_data: dict) -> dict:
+    """Normalize input keys and filter factors based on program requirements."""
+    clean = {}
+    
+    # 1. Basic Key Normalization
+    for k, v in raw_data.items():
+        canonical = INPUT_ALIASES.get(k)
+        if canonical:
+            clean[canonical] = v
+        elif k == 'course':
+            clean['course'] = str(v).upper().strip()
+
+    # 2. Program-Aware Feature Masking
+    course = clean.get('course', '')
+    if course and course not in BOARD_PROGRAMS:
+        # Explicitly zero out board-related factors for non-board programs (e.g. BSCS, BSIT)
+        clean['board_passer'] = 0
+        clean['board_exam_score'] = 0
+
+    return clean
 
 MODEL_KEYS = ('rf', 'lr')
 
@@ -71,13 +98,7 @@ class EmployabilityPredictor:
             return float(default)
 
     def _normalize_input(self, input_data: dict) -> dict:
-        normalized = {}
-        for raw_key, value in (input_data or {}).items():
-            key = INPUT_ALIASES.get(raw_key, raw_key)
-            normalized[key] = value
-        if 'course' in normalized and normalized['course'] is not None:
-            normalized['course'] = str(normalized['course']).strip().upper()
-        return normalized
+        return _sanitize_input(input_data or {})
 
     def _load_model_bundle(self, model_key: str) -> bool:
         model_path = self.paths[f'{model_key}_model']
@@ -184,6 +205,49 @@ class EmployabilityPredictor:
         if model_note_or_error:
             result['model_note'] = model_note_or_error
         return result
+
+    def predict_batch(self, input_list: list, model: str = 'rf') -> list:
+        """Run predictions on a list of input dicts in one vectorized call."""
+        if not input_list:
+            return []
+        model_key, err = self._resolve_model(model)
+        if not model_key:
+            return [{'error': err}] * len(input_list)
+
+        model_obj = self.models.get(model_key)
+        expected_features = self.features.get(model_key)
+        defaults = self.defaults.get(model_key, {})
+        if model_obj is None or not expected_features:
+            return [{'error': 'Model not available'}] * len(input_list)
+
+        # Build one DataFrame for all rows at once
+        rows = []
+        for inp in input_list:
+            row = {f: 0.0 for f in expected_features}
+            data = self._normalize_input(inp)
+            for field in NUMERIC_INPUT_FIELDS:
+                if field in expected_features:
+                    row[field] = self._to_float(data.get(field, defaults.get(field, 0.0)),
+                                                defaults.get(field, 0.0))
+            course = str(data.get('course', defaults.get('course', ''))).strip().upper()
+            col = f'course_{course}'
+            if col in expected_features:
+                row[col] = 1.0
+            rows.append(row)
+
+        X = pd.DataFrame(rows, columns=expected_features)
+        preds = model_obj.predict(X)
+        probas = model_obj.predict_proba(X)[:, 1] if hasattr(model_obj, 'predict_proba') else None
+
+        results = []
+        for i, pred in enumerate(preds):
+            prob = float(probas[i]) if probas is not None else None
+            results.append({
+                'prediction': int(pred),
+                'probability_employed': round(prob, 4) if prob is not None else None,
+                'model_used': model_key,
+            })
+        return results
 
     def predict(self, input_data: dict, model: str = 'rf') -> str:
         details = self.predict_details(input_data, model=model)

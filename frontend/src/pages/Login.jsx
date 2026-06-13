@@ -27,6 +27,10 @@ export default function Login() {
       const user = await login(email, password)
       if (user.role === 'admin') {
         navigate('/admin/dashboard')
+      } else if (user.role === 'company') {
+        navigate('/company/dashboard')
+      } else if (user.ncae_completed === false) {
+        navigate('/alumni/ncae')
       } else {
         navigate('/alumni/dashboard')
       }
@@ -130,7 +134,9 @@ export default function Login() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
-                      className={`${inputBase} ${inputFocus} pr-12`}
+                      autoComplete="current-password"
+                      style={{ WebkitTextSecurity: showPass ? 'none' : undefined }}
+                      className={`${inputBase} ${inputFocus} pr-12 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden`}
                     />
                     <button
                       type="button"

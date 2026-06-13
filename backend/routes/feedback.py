@@ -25,6 +25,21 @@ def admin_required(fn):
     return wrapper
 
 
+import threading
+from ml.train_rf import train_random_forest
+from ml.train_employability_lr import train_linear_employability
+from ml.predictor import ml_predictor
+
+def shadow_retrain_task(db_path):
+    """Background task to retrain models without blocking the user request."""
+    try:
+        train_random_forest(database_path=db_path)
+        train_linear_employability(database_path=db_path)
+        ml_predictor._load_models()
+        print("[Shadow Mode] Models successfully retrained in background.")
+    except Exception as e:
+        print(f"[Shadow Mode] Background retraining failed: {e}")
+
 @feedback_bp.route('', methods=['POST'])
 @jwt_required()
 def submit_feedback():
@@ -50,6 +65,16 @@ def submit_feedback():
         db.execute('UPDATE users SET employed = 0 WHERE id = ?', [user_id])
 
     db.commit()
+
+    # Shadow Retrain Logic: Trigger background retrain every 5 feedbacks
+    feedback_count = db.execute("SELECT COUNT(*) as cnt FROM feedbacks").fetchone()['cnt']
+    if feedback_count % 5 == 0:
+        import os
+        db_path = os.getenv('DATABASE', 'plp_alumni.db')
+        thread = threading.Thread(target=shadow_retrain_task, args=(db_path,))
+        thread.daemon = True
+        thread.start()
+
     return jsonify({'message': 'Feedback submitted successfully'}), 201
 
 

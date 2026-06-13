@@ -6,14 +6,15 @@ import {
   ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { MdPeople, MdTrendingUp, MdSchool, MdErrorOutline,
-         MdUploadFile, MdInsights, MdAssessment, MdHistory } from 'react-icons/md'
+         MdUploadFile, MdInsights, MdAssessment, MdHistory,
+         MdWorkOutline } from 'react-icons/md'
 import api from '../../services/api'
 
 const quickActions = [
-  { label: 'Upload Data Model', icon: MdUploadFile, to: '/admin/upload-model', grad: '#0f2d1a' },
-  { label: 'Forecasting',       icon: MdInsights,   to: '/admin/forecasting',  grad: '#1d4ed8' },
-  { label: 'Generate Reports',  icon: MdAssessment, to: '/admin/predict-report', grad: '#7c3aed' },
-  { label: 'View History',      icon: MdHistory,    to: '/admin/employment-comparison', grad: '#b45309' },
+  { label: 'Upload Data Model', icon: MdUploadFile, to: '/admin/upload-model',          grad: '#1a3d27' },
+  { label: 'Forecasting',       icon: MdInsights,   to: '/admin/forecasting',            grad: '#1a3d27' },
+  { label: 'Generate Reports',  icon: MdAssessment, to: '/admin/predict-report',         grad: '#1a3d27' },
+  { label: 'View History',      icon: MdHistory,    to: '/admin/employment-comparison',  grad: '#1a3d27' },
 ]
 
 const CustomDot = ({ cx, cy, payload }) =>
@@ -37,22 +38,29 @@ const CustomTooltip = ({ active, payload, label }) => {
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
-  const [metrics, setMetrics] = useState({ total_alumni: '…', employment_rate: '…', employment_rate_change: 0, graduate_success: '…', margin_of_error: '…' })
+  const [metrics, setMetrics] = useState({ total_alumni: 0, employment_rate: 0, employment_rate_change: 0, graduate_success: 0, margin_of_error: 0 })
   const [employmentData, setEmploymentData] = useState([])
-  const [model, setModel] = useState('Linear Regression')
+  const [health, setHealth] = useState(null)
+  const [predictSummary, setPredictSummary] = useState(null)
+  const [predictYear, setPredictYear] = useState(null)
 
   useEffect(() => {
-    api.get('/admin/dashboard', { params: { model } }).then(r => {
+    api.get('/admin/dashboard').then(r => {
       setMetrics(r.data.metrics)
       setEmploymentData(r.data.employment_data || [])
     }).catch(() => {})
-  }, [model])
+
+    api.get('/admin/data-health').then(r => setHealth(r.data)).catch(() => {})
+
+    api.get('/admin/predict').then(r => {
+      setPredictSummary(r.data.summary || null)
+      setPredictYear(r.data.graduation_year || null)
+    }).catch(() => {})
+  }, [])
 
   const metricCards = [
-    { label: 'Total Alumni',     value: metrics.total_alumni,      sub: '+124 this year',            icon: MdPeople,       color: '#6366f1', bg: '#eef2ff' },
-    { label: 'Employment Rate',  value: `${metrics.employment_rate}%`, sub: `↑ ${metrics.employment_rate_change}% vs last year`, icon: MdTrendingUp, color: '#0f2d1a', bg: '#e6ede8' },
-    { label: 'Graduate Success', value: `${metrics.graduate_success}%`, sub: 'Of total graduates',      icon: MdSchool,       color: '#0ea5e9', bg: '#f0f9ff' },
-    { label: 'Margin of Error',  value: `±${metrics.margin_of_error}%`, sub: 'Forecast model accuracy',   icon: MdErrorOutline, color: '#f59e0b', bg: '#fffbeb' },
+    { label: 'Total Alumni',    value: metrics.total_alumni ?? 0,     sub: 'Alumni in dataset',                  icon: MdPeople,       color: '#0f2d1a', bg: '#e6ede8' },
+    { label: 'Employment Rate', value: `${metrics.employment_rate}%`, sub: `↑ ${metrics.employment_rate_change}% vs last year`, icon: MdTrendingUp, color: '#10b981', bg: '#f0fdf4' },
   ]
 
   const forecastYear = employmentData.find(d => d.forecast)?.year
@@ -67,8 +75,8 @@ export default function AdminDashboard() {
             <p className="text-sm text-gray-400 mt-0.5">Overview of alumni employment data and forecasts</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="text-right"><p className="text-xs font-semibold text-gray-700">Admin</p><p className="text-xs text-gray-400">Administrator</p></div>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-black" style={{ background: '#0f2d1a' }}>A</div>
+            
+            
           </div>
         </div>
 
@@ -77,18 +85,56 @@ export default function AdminDashboard() {
           {metricCards.map((m) => {
             const Icon = m.icon
             return (
-              <div key={m.label} className="bg-white rounded-2xl p-5 flex items-start gap-3" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+              <div key={m.label} className="bg-white rounded-2xl flex items-center gap-3 h-full" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)', padding: '0 20px' }}>
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: m.bg }}>
                   <Icon className="text-lg" style={{ color: m.color }} />
                 </div>
-                <div>
-                  <p className="text-xs text-gray-400 mb-0.5">{m.label}</p>
+                <div className="min-w-0">
+                  <p className="text-xs text-gray-400 mb-0.5 truncate">{m.label}</p>
                   <p className="text-2xl font-black leading-none" style={{ color: m.color }}>{m.value}</p>
-                  <p className="text-xs text-gray-400 mt-1">{m.sub}</p>
+                  <p className="text-xs text-gray-400 mt-1 truncate">{m.sub}</p>
                 </div>
               </div>
             )
           })}
+
+          {/* Employability Prediction card — spans 2 cols to fill the gap left by removed card */}
+          <div className="bg-white rounded-2xl p-4 cursor-pointer hover:shadow-md transition-all col-span-2"
+            style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}
+            onClick={() => navigate('/admin/predict')}>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#e6ede8' }}>
+                  <MdWorkOutline className="text-base" style={{ color: '#0f2d1a' }} />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">Employability Prediction</p>
+                  <p className="text-xs font-semibold" style={{ color: '#0f2d1a' }}>
+                    {predictYear ? `Batch ${predictYear} · Latest` : 'Latest Batch'}
+                  </p>
+                </div>
+              </div>
+              <span className="text-[10px] text-gray-400 hidden sm:block">Click to view →</span>
+            </div>
+            {predictSummary ? (
+              <div className="grid grid-cols-3 gap-2 mt-1">
+                <div className="rounded-xl p-2.5 text-center" style={{ background: '#dcfce7' }}>
+                  <p className="text-2xl font-black" style={{ color: '#15803d' }}>{predictSummary.high ?? 0}</p>
+                  <p className="text-[10px] font-bold text-green-700">Likely Employable</p>
+                </div>
+                <div className="rounded-xl p-2.5 text-center" style={{ background: '#dbeafe' }}>
+                  <p className="text-2xl font-black" style={{ color: '#1d4ed8' }}>{predictSummary.employable ?? 0}</p>
+                  <p className="text-[10px] font-bold text-blue-700">Employable</p>
+                </div>
+                <div className="rounded-xl p-2.5 text-center" style={{ background: '#fee2e2' }}>
+                  <p className="text-2xl font-black" style={{ color: '#b91c1c' }}>{predictSummary.least ?? 0}</p>
+                  <p className="text-[10px] font-bold text-red-700">Least Employable</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400 text-center py-3">No prediction data yet</p>
+            )}
+          </div>
         </div>
 
         {/* Chart + Quick Actions */}
@@ -98,20 +144,6 @@ export default function AdminDashboard() {
               <div>
                 <h2 className="text-sm font-bold text-gray-900">Employment Rate Forecast</h2>
                 <p className="text-xs text-gray-400 mt-0.5">Historical trend with 1-year model projection</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-500">Model</span>
-                <select
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700 focus:outline-none"
-                >
-                  <option>Linear Regression</option>
-                  <option>Random Forest</option>
-                  <option>Auto ARIMA (AIC search)</option>
-                  <option>ARIMA (p=2, d=1, q=2)</option>
-                  <option>ARIMA (p=1, d=1, q=1)</option>
-                </select>
               </div>
             </div>
             <ResponsiveContainer width="100%" height={240}>
@@ -138,7 +170,7 @@ export default function AdminDashboard() {
 
           {/* Quick Actions */}
           <div className="w-full lg:w-56 lg:flex-shrink-0">
-            <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+            <div className="bg-white rounded-2xl p-5 mb-5" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
               <h2 className="text-sm font-bold text-gray-900 mb-4">Quick Actions</h2>
               <div className="space-y-2.5">
                 {quickActions.map((action) => {
@@ -153,6 +185,36 @@ export default function AdminDashboard() {
                 })}
               </div>
             </div>
+
+            {/* Data Health Mini Widget */}
+            {health && (
+              <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                <h2 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <MdAssessment className="text-emerald-600" /> Data Health
+                </h2>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-gray-400 font-bold uppercase">Balance</span>
+                    <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${health.balance?.status === 'Balanced' ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-800'}`}>
+                      {health.balance?.status}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {health.metrics?.slice(0, 3).map((m, i) => (
+                      <div key={i} className="flex justify-between items-center text-[10px]">
+                        <span className="text-gray-500">{m.field}</span>
+                        <span className={m.status === 'Good' ? 'text-emerald-600' : 'text-orange-500 font-bold'}>
+                          {m.missing_pct}% missing
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="pt-2 border-t border-gray-50">
+                    <p className="text-[10px] text-gray-400 italic">Total Training Rows: <span className="font-bold text-gray-600">{health.total_rows}</span></p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

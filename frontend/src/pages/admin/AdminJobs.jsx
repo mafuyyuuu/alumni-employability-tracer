@@ -5,9 +5,9 @@ import api from '../../services/api'
 
 const typeStyle = {
   'Full-time':  { background: '#e6ede8', color: '#0f2d1a' },
-  'Part-time':  { background: '#eff6ff', color: '#2563eb' },
+  'Part-time':  { background: '#d8ede3', color: '#1a3d27' },
   'Contract':   { background: '#fff7ed', color: '#ea580c' },
-  'Internship': { background: '#fdf4ff', color: '#9333ea' },
+  'Internship': { background: '#f0fdf4', color: '#2d6a4f' },
 }
 
 export default function AdminJobs() {
@@ -55,8 +55,8 @@ export default function AdminJobs() {
             <p className="text-sm text-gray-400 mt-0.5">Manage all job listings on the platform</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="text-right hidden sm:block"><p className="text-xs font-semibold text-gray-700">Admin</p><p className="text-xs text-gray-400">Administrator</p></div>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-black" style={{ background: '#0f2d1a' }}>A</div>
+            
+            
           </div>
         </div>
 
@@ -124,7 +124,7 @@ export default function AdminJobs() {
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={typeStyle[j.type] || typeStyle['Full-time']}>{j.type}</span>
               </div>
               <span className="col-span-2 text-xs text-gray-500">{j.location}</span>
-              <span className="col-span-1 text-xs text-gray-500">{j.salary || '—'}</span>
+              <span className="col-span-1 text-xs text-gray-500">{j.salary || 'N/A'}</span>
               <div className="col-span-1 flex justify-center">
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
                   style={j.status === 'Open' ? { background: '#e6ede8', color: '#0f2d1a' } : { background: '#f3f4f6', color: '#9ca3af' }}>
@@ -132,7 +132,7 @@ export default function AdminJobs() {
                 </span>
               </div>
               <div className="col-span-1 flex justify-end gap-1">
-                <button className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors rounded-lg hover:bg-blue-50"><MdEdit className="text-sm" /></button>
+                <button className="p-1.5 text-gray-400 hover:text-green-700 transition-colors rounded-lg hover:bg-green-50"><MdEdit className="text-sm" /></button>
                 <button onClick={() => setDeleteId(j.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"><MdDelete className="text-sm" /></button>
               </div>
             </div>
