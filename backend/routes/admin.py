@@ -906,6 +906,18 @@ def list_users():
     TEST_EMAILS = (
         'juan.delacruz@plp.edu.ph','maria.santos@plp.edu.ph','pedro.reyes@plp.edu.ph',
         'ana.garcia@plp.edu.ph','jose.mendoza@plp.edu.ph',
+        'demo.alumni@plp.edu.ph','demo2.alumni@plp.edu.ph',
+        'bscs.1@plp.edu.ph','bscs.2@plp.edu.ph',
+        'bsit.1@plp.edu.ph','bsit.2@plp.edu.ph',
+        'bscpe.1@plp.edu.ph','bscpe.2@plp.edu.ph',
+        'bsece.1@plp.edu.ph','bsece.2@plp.edu.ph',
+        'bsce.1@plp.edu.ph','bsce.2@plp.edu.ph',
+        'bsn.1@plp.edu.ph','bsn.2@plp.edu.ph',
+        'bsed.1@plp.edu.ph','bsed.2@plp.edu.ph',
+        'beed.1@plp.edu.ph','beed.2@plp.edu.ph',
+        'bsa.1@plp.edu.ph','bsa.2@plp.edu.ph',
+        'bsba.1@plp.edu.ph','bsba.2@plp.edu.ph',
+        'bshm.1@plp.edu.ph','bshm.2@plp.edu.ph',
     )
     placeholders = ','.join('?' * len(TEST_EMAILS))
     reg_rows = db.execute(
@@ -2163,6 +2175,20 @@ def model_status():
 TEST_ACCOUNT_EMAILS = (
     'juan.delacruz@plp.edu.ph', 'maria.santos@plp.edu.ph', 'pedro.reyes@plp.edu.ph',
     'ana.garcia@plp.edu.ph', 'jose.mendoza@plp.edu.ph',
+    # demo accounts (ncae_completed=0)
+    'demo.alumni@plp.edu.ph', 'demo2.alumni@plp.edu.ph',
+    # preview accounts — 2 per program (ncae_completed=1)
+    'bscs.1@plp.edu.ph', 'bscs.2@plp.edu.ph',
+    'bsit.1@plp.edu.ph', 'bsit.2@plp.edu.ph',
+    'bscpe.1@plp.edu.ph', 'bscpe.2@plp.edu.ph',
+    'bsece.1@plp.edu.ph', 'bsece.2@plp.edu.ph',
+    'bsce.1@plp.edu.ph', 'bsce.2@plp.edu.ph',
+    'bsn.1@plp.edu.ph', 'bsn.2@plp.edu.ph',
+    'bsed.1@plp.edu.ph', 'bsed.2@plp.edu.ph',
+    'beed.1@plp.edu.ph', 'beed.2@plp.edu.ph',
+    'bsa.1@plp.edu.ph', 'bsa.2@plp.edu.ph',
+    'bsba.1@plp.edu.ph', 'bsba.2@plp.edu.ph',
+    'bshm.1@plp.edu.ph', 'bshm.2@plp.edu.ph',
 )
 
 def _sync_users_to_training_rows(db):

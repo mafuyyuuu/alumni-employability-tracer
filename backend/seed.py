@@ -165,6 +165,62 @@ def seed():
     else:
         c.execute("UPDATE users SET is_test_account=1, ncae_completed=0 WHERE email='demo.alumni@plp.edu.ph'")
 
+    # ── Preview accounts: 2 per program, ncae_completed=1 (no evaluation) ──
+    # Excluded from frontend lists and training data via is_test_account=1.
+    # Password: preview123
+    preview_alumni = [
+        # first, last, course, email, grad_year, age, avg_grade, ojt_grade, soft_skills, hard_skills, board_passer, employed
+        ('Alex',    'Reyes',      'BSCS',  'bscs.1@plp.edu.ph',  2023, 23, 90, 92, 85, 82, 0, 1),
+        ('Jordan',  'Santos',     'BSCS',  'bscs.2@plp.edu.ph',  2024, 22, 78, 76, 70, 68, 0, 0),
+        ('Morgan',  'Cruz',       'BSIT',  'bsit.1@plp.edu.ph',  2023, 23, 88, 90, 83, 80, 0, 1),
+        ('Riley',   'Lim',        'BSIT',  'bsit.2@plp.edu.ph',  2024, 22, 76, 74, 68, 65, 0, 0),
+        ('Casey',   'Garcia',     'BSCPE', 'bscpe.1@plp.edu.ph', 2023, 23, 89, 91, 84, 81, 1, 1),
+        ('Jamie',   'Torres',     'BSCPE', 'bscpe.2@plp.edu.ph', 2024, 22, 77, 75, 69, 66, 0, 0),
+        ('Drew',    'Flores',     'BSECE', 'bsece.1@plp.edu.ph', 2023, 23, 87, 89, 82, 79, 1, 1),
+        ('Taylor',  'Ramos',      'BSECE', 'bsece.2@plp.edu.ph', 2024, 22, 75, 73, 67, 64, 0, 0),
+        ('Quinn',   'Dela Cruz',  'BSCE',  'bsce.1@plp.edu.ph',  2023, 24, 91, 93, 86, 83, 1, 1),
+        ('Avery',   'Mendoza',    'BSCE',  'bsce.2@plp.edu.ph',  2024, 22, 79, 77, 71, 69, 0, 0),
+        ('Sky',     'Aquino',     'BSN',   'bsn.1@plp.edu.ph',   2023, 23, 92, 94, 87, 84, 1, 1),
+        ('Lane',    'Bautista',   'BSN',   'bsn.2@plp.edu.ph',   2024, 22, 80, 78, 72, 70, 0, 0),
+        ('Logan',   'Castillo',   'BSEd',  'bsed.1@plp.edu.ph',  2023, 24, 88, 90, 83, 80, 1, 1),
+        ('Robin',   'Villanueva', 'BSEd',  'bsed.2@plp.edu.ph',  2024, 23, 76, 74, 68, 65, 0, 0),
+        ('Blair',   'Navarro',    'BEEd',  'beed.1@plp.edu.ph',  2023, 24, 87, 89, 82, 79, 1, 1),
+        ('Parker',  'Fernandez',  'BEEd',  'beed.2@plp.edu.ph',  2024, 23, 75, 73, 67, 64, 0, 0),
+        ('Reese',   'Pascual',    'BSA',   'bsa.1@plp.edu.ph',   2023, 24, 90, 92, 85, 82, 1, 1),
+        ('Avery',   'Guevarra',   'BSA',   'bsa.2@plp.edu.ph',   2024, 23, 77, 75, 69, 66, 0, 0),
+        ('Harper',  'Magno',      'BSBA',  'bsba.1@plp.edu.ph',  2023, 24, 86, 88, 81, 78, 0, 1),
+        ('Spencer', 'Dizon',      'BSBA',  'bsba.2@plp.edu.ph',  2024, 23, 74, 72, 66, 63, 0, 0),
+        ('Sage',    'Pineda',     'BSHM',  'bshm.1@plp.edu.ph',  2023, 24, 85, 87, 80, 77, 0, 1),
+        ('River',   'Tolentino',  'BSHM',  'bshm.2@plp.edu.ph',  2024, 23, 73, 71, 65, 62, 0, 0),
+    ]
+    for first, last, course, email, yr, age, avg_grade, ojt_grade, ss, hs, bp, emp in preview_alumni:
+        c.execute("SELECT id FROM users WHERE email = ?", [email])
+        if not c.fetchone():
+            c.execute("""
+                INSERT INTO users (first_name, last_name, course, email, password_hash,
+                    role, account_status, graduation_year, age, employed, ncae_completed,
+                    soft_skills, hard_skills, avg_grade, board_passer, is_test_account)
+                VALUES (?,?,?,?,?,'alumni','Active',?,?,?,1,?,?,?,?,1)
+            """, (first, last, course, email, hash_pw('preview123'),
+                  yr, age, emp, ss, hs, avg_grade, bp))
+        else:
+            c.execute(
+                "UPDATE users SET is_test_account=1, ncae_completed=1 WHERE email=?", [email])
+
+    # ── Second demo account: ncae_completed=0 (evaluation required) ──────────
+    # Password: demo123  |  Program: BSN (different from demo.alumni which is BSCS)
+    c.execute("SELECT id FROM users WHERE email = 'demo2.alumni@plp.edu.ph'")
+    if not c.fetchone():
+        c.execute("""
+            INSERT INTO users (first_name, last_name, course, email, password_hash,
+                role, account_status, graduation_year, age, employed, ncae_completed,
+                soft_skills, hard_skills, avg_grade, board_passer, is_test_account)
+            VALUES (?,?,?,?,?,'alumni','Active',2024,22,0,0,0,0,0,0,1)
+        """, ('Demo', 'Two', 'BSN', 'demo2.alumni@plp.edu.ph', hash_pw('demo123')))
+    else:
+        c.execute(
+            "UPDATE users SET is_test_account=1, ncae_completed=0 WHERE email='demo2.alumni@plp.edu.ph'")
+
     # ── Fill pending skills from ml_training_rows averages ───────────────
     # For alumni who haven't completed NCAE and have no skills data,
     # fill soft_skills and hard_skills using program/year averages from training data.
