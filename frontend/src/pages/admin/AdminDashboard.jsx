@@ -11,7 +11,7 @@ import { MdPeople, MdTrendingUp, MdSchool, MdErrorOutline,
 import api from '../../services/api'
 
 const quickActions = [
-  { label: 'Upload Data Model', icon: MdUploadFile, to: '/admin/upload-model',          grad: '#1a3d27' },
+  { label: 'Upload Dataset', icon: MdUploadFile, to: '/admin/upload-model',          grad: '#1a3d27' },
   { label: 'Forecasting',       icon: MdInsights,   to: '/admin/forecasting',            grad: '#1a3d27' },
   { label: 'Generate Reports',  icon: MdAssessment, to: '/admin/predict-report',         grad: '#1a3d27' },
   { label: 'View History',      icon: MdHistory,    to: '/admin/employment-comparison',  grad: '#1a3d27' },

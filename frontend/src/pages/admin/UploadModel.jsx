@@ -6,7 +6,7 @@ import {
 } from 'react-icons/md'
 import api from '../../services/api'
 
-const TABS = ['Upload New Dataset', 'Add Data to Existing Model', 'View Dataset']
+const TABS = ['Upload New Dataset', 'Add Data to Existing Dataset', 'View Dataset']
 
 const guidelines = [
   'File must be in CSV or Excel format',

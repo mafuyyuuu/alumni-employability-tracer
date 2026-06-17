@@ -30,7 +30,7 @@ const sections = [
       { label: 'Jobs',              to: '/admin/jobs',         icon: MdWork },
       { label: 'Users',             to: '/admin/users',        icon: MdPeople },
       { label: 'Feedbacks',         to: '/admin/feedbacks',    icon: MdFeedback },
-      { label: 'Upload Data Model', to: '/admin/upload-model', icon: MdCloudUpload },
+      { label: 'Upload Dataset', to: '/admin/upload-model', icon: MdCloudUpload },
     ],
   },
 ]
