@@ -6,7 +6,7 @@ import {
 } from 'react-icons/md'
 import api from '../../services/api'
 
-const TABS = ['Upload New Model', 'Add Data to Existing Model', 'View Dataset']
+const TABS = ['Upload New Dataset', 'Add Data to Existing Model', 'View Dataset']
 
 const guidelines = [
   'File must be in CSV or Excel format',
@@ -68,66 +68,226 @@ function DropZone({ selectedFile, onFile, onClear, uploadDone, onUploadAnother, 
   )
 }
 
-// ── Tab 0: Upload New Model ───────────────────────────────────────────────────
-function TabUploadNew({ onUploaded, onStatusRefresh }) {
-  const [modelName, setModelName] = useState('')
+// ── Tab 0: Upload New Dataset (bulk overwrite) ───────────────────────────────
+function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
   const [file, setFile] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [done, setDone] = useState(false)
-  const [policy, setPolicy] = useState('')
-  const [importSummary, setImportSummary] = useState(null)
+  const [confirmed, setConfirmed] = useState(false)
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState('')
+  const [progress, setProgress] = useState(null)
+  const [trainingStatus, setTrainingStatus] = useState(null)
+  const trainingPollRef = useRef(null)
+  const progressPollRef = useRef(null)
+
+  function stopPolling() {
+    if (trainingPollRef.current) { clearInterval(trainingPollRef.current); trainingPollRef.current = null }
+    if (progressPollRef.current) { clearInterval(progressPollRef.current); progressPollRef.current = null }
+  }
+
+  function startProgressPolling() {
+    if (progressPollRef.current) clearInterval(progressPollRef.current)
+    let lastPct = 0
+    progressPollRef.current = setInterval(async () => {
+      try {
+        const r = await api.get('/admin/upload/progress')
+        const { stage, percent, message } = r.data
+        const eff = Math.max(percent, lastPct); lastPct = eff
+        setProgress({ stage, percent: eff, message })
+        if (stage === 'done' || stage === 'error') {
+          clearInterval(progressPollRef.current); progressPollRef.current = null; stopPolling()
+        }
+      } catch { /* ignore */ }
+    }, 600)
+  }
+
+  function startTrainingPolling() {
+    if (trainingPollRef.current) clearInterval(trainingPollRef.current)
+    trainingPollRef.current = setInterval(async () => {
+      try {
+        const r = await api.get('/admin/training/status')
+        const s = r.data.status
+        setTrainingStatus(s)
+        if (s === 'done') {
+          stopPolling()
+          setProgress({ stage: 'done', percent: 100, message: 'Dataset uploaded and models retrained!' })
+          setResult(prev => ({ ...prev, forecast: r.data.result?.forecast }))
+          onStatusRefresh()
+        } else if (s === 'error') {
+          stopPolling()
+          setProgress({ stage: 'error', percent: 0, message: r.data.error || 'Training failed' })
+          setError(`Model retraining failed: ${r.data.error || 'Unknown error'}`)
+        }
+      } catch { clearInterval(trainingPollRef.current); trainingPollRef.current = null }
+    }, 2000)
+  }
+
+  useEffect(() => stopPolling, [])
 
   async function upload() {
-    if (!file) return
+    if (!file || !confirmed) return
     setUploading(true)
+    setError('')
+    setProgress({ stage: 'uploading', percent: 0, message: 'Uploading file…' })
+    startProgressPolling()
     try {
       const fd = new FormData()
       fd.append('file', file)
-      fd.append('name', modelName || file.name)
-      fd.append('apply_to_training', 'false')
-      fd.append('retrain_after_import', 'false')
+      fd.append('name', file.name)
+      fd.append('overwrite_all', 'true')
+      fd.append('apply_to_training', 'true')
+      fd.append('retrain_after_import', 'true')
+      fd.append('create_accounts', 'false')
       const res = await api.post('/admin/upload', fd)
       const data = res.data
-      if (!data) throw new Error('Empty response from server')
-      setPolicy(data.training_policy || '')
-      setImportSummary(data.import || null)
-      setDone(true)
       onUploaded(data.upload)
-      onStatusRefresh()
+      setResult({ import: data.import || null, forecast: data.forecast || null })
+      setDone(true)
+      onYearsRefresh()
+      if (data.training_async) {
+        setTrainingStatus('running')
+        startTrainingPolling()
+      } else {
+        stopPolling()
+        setProgress({ stage: 'done', percent: 100, message: 'Complete!' })
+        onStatusRefresh()
+      }
     } catch (err) {
-      alert(err.message || 'Upload failed. Please try again.')
+      stopPolling()
+      setProgress(null)
+      setError(err.response?.data?.error || err.message || 'Upload failed. Please try again.')
     } finally {
       setUploading(false)
     }
   }
 
-  function reset() { setFile(null); setModelName(''); setDone(false); setPolicy(''); setImportSummary(null) }
+  function reset() {
+    stopPolling()
+    setFile(null); setDone(false); setConfirmed(false)
+    setResult(null); setError(''); setProgress(null); setTrainingStatus(null)
+  }
 
   return (
     <div>
-      <div className="mb-5">
-        <label className="block text-xs font-semibold mb-1.5" style={{ color: '#0f2d1a' }}>Model Name</label>
-        <input type="text" placeholder="e.g., Employment Forecast Model v1"
-          value={modelName} onChange={e => setModelName(e.target.value)}
-          className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-gray-800 bg-gray-50 focus:outline-none focus:bg-white focus:ring-2 transition-all"
-          style={{ '--tw-ring-color': 'rgba(15,45,26,0.25)' }} />
+      {/* Warning banner */}
+      <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 flex gap-3">
+        <MdWarning className="text-red-500 text-lg flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="text-xs font-bold text-red-800 mb-0.5">This will overwrite ALL existing training data</p>
+          <p className="text-[11px] text-red-700">
+            Every existing training row (all years) will be permanently deleted and replaced with the data in your uploaded file.
+            Use this to load a fresh bulk dataset (e.g. 2018–2024). Cannot be undone.
+          </p>
+        </div>
       </div>
-      <DropZone selectedFile={file} onFile={f => { setFile(f); setDone(false) }} onClear={() => setFile(null)}
-        uploadDone={done} onUploadAnother={reset} accept=".csv,.xlsx,.pkl" />
-      <div className="flex justify-end gap-3 mt-5 pt-5 border-t border-gray-100">
-        <button onClick={reset}
-          className="px-5 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
-          Cancel
-        </button>
-        <button onClick={upload} disabled={!file || uploading}
-          className="px-6 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
-          style={{ background: '#0f2d1a' }}>
-          {uploading
-            ? <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="white" strokeWidth="4" /><path className="opacity-75" fill="white" d="M4 12a8 8 0 018-8v8z" /></svg> Uploading…</>
-            : 'Upload Model'}
-        </button>
+
+      <DropZone
+        selectedFile={file}
+        onFile={f => { setFile(f); setDone(false); setError('') }}
+        onClear={() => setFile(null)}
+        uploadDone={done}
+        onUploadAnother={reset}
+        accept=".csv,.xlsx,.xls"
+      />
+
+      {error && (
+        <div className="mt-3 rounded-xl bg-red-50 border border-red-100 px-4 py-2.5 text-xs text-red-700 font-medium">
+          {error}
+        </div>
+      )}
+
+      {/* Progress bar */}
+      {progress && progress.stage !== 'idle' && (
+        <div className="mt-3 rounded-xl border border-gray-200 bg-white px-4 py-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs font-semibold text-gray-700">{progress.message || 'Processing…'}</span>
+            <span className="text-xs font-black" style={{ color: progress.stage === 'done' ? '#16a34a' : progress.stage === 'error' ? '#dc2626' : '#0f2d1a' }}>
+              {progress.percent}%
+            </span>
+          </div>
+          <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+            <div className="h-2.5 rounded-full transition-all duration-300"
+              style={{ width: `${progress.percent}%`, background: progress.stage === 'done' ? '#16a34a' : progress.stage === 'error' ? '#dc2626' : '#0f2d1a' }} />
+          </div>
+          <div className="flex gap-4 mt-2">
+            {[
+              { label: 'Upload', done: progress.percent >= 5 },
+              { label: 'Replace data', active: progress.stage === 'importing', done: progress.percent >= 60 },
+              { label: 'Retrain models', active: progress.stage === 'training', done: progress.stage === 'done' },
+            ].map(step => (
+              <div key={step.label} className="flex items-center gap-1">
+                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${step.done ? 'bg-green-500' : step.active ? 'bg-yellow-400 animate-pulse' : 'bg-gray-200'}`} />
+                <span className={`text-[10px] font-semibold ${step.done ? 'text-green-600' : step.active ? 'text-yellow-600' : 'text-gray-400'}`}>{step.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Import result */}
+      {result?.import && (
+        <div className="mt-3 rounded-xl bg-gray-50 border border-gray-100 px-4 py-3 text-xs text-gray-600">
+          <p className="font-bold text-gray-800 mb-1">Import Summary</p>
+          Imported: <span className="font-semibold text-gray-900">{result.import.rows_imported ?? 0}</span> rows
+          &nbsp;·&nbsp; Skipped: <span className="font-semibold">{result.import.rows_skipped ?? 0}</span>
+        </div>
+      )}
+
+      {/* Forecast result */}
+      {result?.forecast && (
+        <div className="mt-3 rounded-xl border px-4 py-3" style={{ borderColor: '#b7e4c7', background: '#e6ede8' }}>
+          <p className="text-xs font-bold mb-2" style={{ color: '#0f2d1a' }}>
+            Auto-Forecast: {result.forecast.forecast_years?.[0]}–{result.forecast.forecast_years?.[2]} Employment Rate
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b" style={{ borderColor: '#b7e4c7' }}>
+                  <th className="text-left pb-1.5 font-semibold" style={{ color: '#0f2d1a' }}>Year</th>
+                  <th className="text-center pb-1.5 font-semibold" style={{ color: '#0f2d1a' }}>Linear Reg.</th>
+                  <th className="text-center pb-1.5 font-semibold" style={{ color: '#0f2d1a' }}>Random Forest</th>
+                  <th className="text-center pb-1.5 font-semibold" style={{ color: '#0f2d1a' }}>ARIMA</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(result.forecast.forecast_years || []).map((yr, i) => (
+                  <tr key={yr} className="border-b last:border-0" style={{ borderColor: '#d8ede3' }}>
+                    <td className="py-1.5 font-bold" style={{ color: '#0f2d1a' }}>{yr}</td>
+                    <td className="py-1.5 text-center font-semibold" style={{ color: '#2d6a4f' }}>{result.forecast.predictions?.lr?.[i]?.rate ?? '—'}%</td>
+                    <td className="py-1.5 text-center font-semibold" style={{ color: '#10b981' }}>{result.forecast.predictions?.rf?.[i]?.rate ?? '—'}%</td>
+                    <td className="py-1.5 text-center font-semibold" style={{ color: '#1a3d27' }}>{result.forecast.predictions?.arima?.[i]?.rate ?? '—'}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-5 pt-5 border-t border-gray-100">
+        {!done && (
+          <label className="flex items-center gap-2 text-xs font-medium text-gray-700 mb-4 cursor-pointer select-none">
+            <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} className="accent-red-600" />
+            I understand this will permanently delete all existing training data and replace it with the uploaded file
+          </label>
+        )}
+        <div className="flex justify-end gap-3">
+          <button onClick={reset}
+            className="px-5 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+            {done ? 'Upload Another' : 'Cancel'}
+          </button>
+          {!done && (
+            <button onClick={upload} disabled={!file || !confirmed || uploading}
+              className="px-6 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+              style={{ background: '#b91c1c' }}>
+              {uploading
+                ? <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="white" strokeWidth="4" /><path className="opacity-75" fill="white" d="M4 12a8 8 0 018-8v8z" /></svg> Uploading…</>
+                : 'Upload & Replace All Data'}
+            </button>
+          )}
+        </div>
       </div>
-      {policy && <p className="text-xs text-gray-400 mt-3 text-right">Training policy: <span className="font-semibold text-gray-600">{policy}</span></p>}
     </div>
   )
 }
@@ -731,8 +891,8 @@ export default function UploadModel() {
         {/* Header */}
         <div className="flex items-center justify-between mb-7">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Upload Data Model</h1>
-            <p className="text-sm text-gray-400 mt-0.5">Upload training data and manage prediction models</p>
+            <h1 className="text-xl font-bold text-gray-900">Upload Dataset</h1>
+            <p className="text-sm text-gray-400 mt-0.5">Upload training datasets and manage prediction models</p>
           </div>
           <div className="flex items-center gap-3">
             
@@ -757,7 +917,7 @@ export default function UploadModel() {
             </div>
 
             {activeTab === 0 && (
-              <TabUploadNew onUploaded={onUploaded} onStatusRefresh={loadModelStatus} />
+              <TabUploadNew onUploaded={onUploaded} onStatusRefresh={loadModelStatus} onYearsRefresh={() => setYearsTick(t => t + 1)} />
             )}
             {activeTab === 1 && (
               <TabAddData

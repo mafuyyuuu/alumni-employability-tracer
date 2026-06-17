@@ -83,14 +83,17 @@ def _run_training_background(app, db_path, dataset_year):
 def _run_import_and_training_background(app, db_path, file_path, safe_name,
                                          dataset_year, retrain, upload_id,
                                          create_accounts, skip_email,
-                                         conflict_mode):
+                                         conflict_mode, overwrite_all=False):
     """Run CSV/Excel import + optional retraining fully in background."""
     global _training_job
     try:
         with app.app_context():
             db = get_db()
 
-            if conflict_mode == 'overwrite' and dataset_year:
+            if overwrite_all:
+                db.execute("DELETE FROM ml_training_rows")
+                db.commit()
+            elif conflict_mode == 'overwrite' and dataset_year:
                 db.execute("DELETE FROM ml_training_rows WHERE graduation_year = ?", [dataset_year])
                 db.commit()
 
@@ -3018,8 +3021,9 @@ def upload_model():
 
     file = request.files['file']
     model_name = request.form.get('name', file.filename)
-    apply_to_training = _is_truthy(request.form.get('apply_to_training'), default=False)
-    retrain_after_import = _is_truthy(request.form.get('retrain_after_import'), default=True)
+    overwrite_all = _is_truthy(request.form.get('overwrite_all'), default=False)
+    apply_to_training = True if overwrite_all else _is_truthy(request.form.get('apply_to_training'), default=False)
+    retrain_after_import = True if overwrite_all else _is_truthy(request.form.get('retrain_after_import'), default=True)
     dataset_year_raw = request.form.get('dataset_year', '').strip()
     conflict_mode = request.form.get('conflict_mode', '').lower()  # 'overwrite' or 'merge'
 
@@ -3064,8 +3068,8 @@ def upload_model():
 
     db = get_db()
 
-    # ── Year sequence + conflict check ────────────────────────────────────────
-    if apply_to_training and is_csv and dataset_year:
+    # ── Year sequence + conflict check (skipped for bulk overwrite) ──────────
+    if not overwrite_all and apply_to_training and is_csv and dataset_year:
         max_year_row = db.execute(
             "SELECT MAX(graduation_year) AS my FROM ml_training_rows WHERE is_active = 1"
         ).fetchone()
@@ -3125,7 +3129,7 @@ def upload_model():
             target=_run_import_and_training_background,
             args=(app_obj, db_path, file_path, safe_name,
                   dataset_year, retrain_after_import, cur.lastrowid,
-                  create_accounts, skip_email, conflict_mode),
+                  create_accounts, skip_email, conflict_mode, overwrite_all),
             daemon=True,
         )
         t.start()
