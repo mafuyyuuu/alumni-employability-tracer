@@ -932,45 +932,6 @@ export default function UploadModel() {
 
           {/* Right Panel */}
           <div className="w-full md:w-60 md:flex-shrink-0 space-y-4">
-            {/* Model Status */}
-            <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-bold text-gray-900">Model Status</h3>
-                {!statusLoading && (
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
-                    style={modelStatus?.loaded
-                      ? { background: '#e6ede8', color: '#0f2d1a' }
-                      : { background: '#fff7ed', color: '#ea580c' }}>
-                    {modelStatus?.loaded ? 'Loaded' : 'Offline'}
-                  </span>
-                )}
-              </div>
-              {statusLoading ? (
-                <p className="text-xs text-gray-400">Loading model info…</p>
-              ) : (
-                <div className="space-y-1.5 text-xs text-gray-500">
-                  <p>Features: <span className="font-semibold text-gray-700">{modelStatus?.feature_count ?? 0}</span></p>
-                  <p>Training rows: <span className="font-semibold text-gray-700">{modelStatus?.row_count ?? 0}</span></p>
-                  <p>Source: <span className="font-semibold text-gray-700">{modelStatus?.training_source || 'N/A'}</span></p>
-                  <p className="break-all">Trained: <span className="font-semibold text-gray-700">{modelStatus?.trained_at_utc || 'N/A'}</span></p>
-                  {modelStatus?.models && (
-                    <div className="pt-2 mt-2 border-t border-gray-100 space-y-1">
-                      <p>RF: <span className="font-semibold text-gray-700">{modelStatus.models.rf?.loaded ? 'Loaded' : 'Offline'}</span></p>
-                      <p>LR: <span className="font-semibold text-gray-700">{modelStatus.models.lr?.loaded ? 'Loaded' : 'Offline'}</span></p>
-                    </div>
-                  )}
-                </div>
-              )}
-              {statusError && <p className="text-xs text-red-500 mt-2">{statusError}</p>}
-              <button onClick={retrainModel} disabled={retraining}
-                className="w-full mt-3 px-3 py-2 rounded-xl text-xs font-bold text-white transition-all hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2"
-                style={{ background: '#0f2d1a' }}>
-                {retraining
-                  ? <><svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="white" strokeWidth="4" /><path className="opacity-75" fill="white" d="M4 12a8 8 0 018-8v8z" /></svg> Retraining…</>
-                  : <><MdSync className="text-sm" /> Retrain from Live DB</>}
-              </button>
-            </div>
-
             {/* Guidelines */}
             <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
               <div className="flex items-center gap-2 mb-4">
