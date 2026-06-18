@@ -219,8 +219,8 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
           <div className="w-full rounded-full h-2 overflow-hidden" style={{ background: '#e5e7eb' }}>
             <div ref={barRef} style={{
               height: '100%', borderRadius: '9999px', willChange: 'width',
-              width: `${progress.percent}%`,
-              backgroundColor: progress.stage === 'done' ? '#16a34a' : progress.stage === 'error' ? '#dc2626' : '#0f2d1a',
+              width: '0%',
+              backgroundColor: '#0f2d1a',
               transition: 'width 0.9s cubic-bezier(0.4,0,0.2,1)',
             }} />
           </div>
@@ -619,8 +619,8 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
           <div className="w-full rounded-full h-2 overflow-hidden" style={{ background: '#e5e7eb' }}>
             <div ref={barRef} style={{
               height: '100%', borderRadius: '9999px', willChange: 'width',
-              width: `${progress.percent}%`,
-              backgroundColor: progress.stage === 'done' ? '#16a34a' : progress.stage === 'error' ? '#dc2626' : '#0f2d1a',
+              width: '0%',
+              backgroundColor: '#0f2d1a',
               transition: 'width 0.9s cubic-bezier(0.4,0,0.2,1)',
             }} />
           </div>
