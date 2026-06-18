@@ -69,36 +69,46 @@ function DropZone({ selectedFile, onFile, onClear, uploadDone, onUploadAnother, 
 }
 
 // ── Tab 0: Upload New Dataset (bulk overwrite) ───────────────────────────────
-// Stage → bar fill width. CSS transition animates between these — only 4 changes per upload.
+// Bar width per stage — CSS transition animates between them (only 3 changes per upload)
 const STAGE_WIDTH = { uploading: 8, importing: 55, training: 88, done: 100, error: 100 }
 
-function ProgressSection({ progress, steps }) {
-  if (!progress || progress.stage === 'idle') return null
-  const isDone = progress.stage === 'done'
-  const isError = progress.stage === 'error'
-  const barW = STAGE_WIDTH[progress.stage] ?? 0
-  const barColor = isDone ? '#16a34a' : isError ? '#dc2626' : '#0f2d1a'
+// Steps are purely stage-based — no percent thresholds, no mid-upload re-renders
+const STEPS_NEW = [
+  { label: 'Upload',        done: s => ['importing','training','done'].includes(s), active: s => s === 'uploading' },
+  { label: 'Replace data',  done: s => ['training','done'].includes(s),             active: s => s === 'importing' },
+  { label: 'Retrain models',done: s => s === 'done',                                active: s => s === 'training'  },
+]
+const STEPS_ADD = [
+  { label: 'Upload',       done: s => ['importing','training','done'].includes(s), active: s => s === 'uploading' },
+  { label: 'Import rows',  done: s => ['training','done'].includes(s),             active: s => s === 'importing' },
+  { label: 'Train models', done: s => s === 'done',                                active: s => s === 'training'  },
+]
+
+// ProgressSection re-renders ONLY on stage change (3×/upload).
+// Percent text and message update via DOM refs — zero React re-renders between stages.
+function ProgressSection({ stage, steps, pctRef, msgRef }) {
+  if (!stage || stage === 'idle') return null
+  const isDone = stage === 'done'
+  const isError = stage === 'error'
   return (
     <div className="mt-3 rounded-xl border border-gray-100 bg-white px-4 py-3">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-semibold text-gray-600">{progress.message || 'Processing…'}</span>
-        <span className="text-xs font-bold tabular-nums"
-          style={{ color: isDone ? '#16a34a' : isError ? '#dc2626' : '#374151' }}>
-          {progress.percent}%
-        </span>
+        <span ref={msgRef} className="text-xs font-semibold text-gray-600">Processing…</span>
+        <span ref={pctRef} className="text-xs font-bold tabular-nums"
+          style={{ color: isDone ? '#16a34a' : isError ? '#dc2626' : '#374151' }}>0%</span>
       </div>
       <div className="w-full rounded-full h-2 overflow-hidden" style={{ background: '#e5e7eb' }}>
         <div style={{
           height: '100%', borderRadius: '9999px',
-          width: `${barW}%`,
-          backgroundColor: barColor,
-          transition: 'width 1.4s ease-in-out, background-color 0.4s',
+          width: `${STAGE_WIDTH[stage] ?? 0}%`,
+          backgroundColor: isDone ? '#16a34a' : isError ? '#dc2626' : '#0f2d1a',
+          transition: 'width 1.4s ease-in-out, background-color 0.5s',
         }} />
       </div>
       <div className="flex items-center mt-3 gap-1">
         {steps.map((step, i) => {
-          const stepDone = step.done(progress)
-          const stepActive = !stepDone && step.active(progress)
+          const stepDone = step.done(stage)
+          const stepActive = !stepDone && step.active(stage)
           return (
             <div key={step.label} className="flex items-center" style={{ flex: i < steps.length - 1 ? '1' : 'none' }}>
               <div className="flex flex-col items-center flex-shrink-0">
@@ -121,18 +131,6 @@ function ProgressSection({ progress, steps }) {
   )
 }
 
-const STEPS_NEW = [
-  { label: 'Upload',        done: p => p.percent >= 5,     active: p => p.stage === 'uploading' },
-  { label: 'Replace data',  done: p => p.percent >= 60,    active: p => p.stage === 'importing' },
-  { label: 'Retrain models',done: p => p.stage === 'done', active: p => p.stage === 'training'  },
-]
-
-const STEPS_ADD = [
-  { label: 'Upload',       done: p => p.percent >= 5,     active: p => p.stage === 'uploading' },
-  { label: 'Import rows',  done: p => p.percent >= 60,    active: p => p.stage === 'importing' },
-  { label: 'Train models', done: p => p.stage === 'done', active: p => p.stage === 'training'  },
-]
-
 function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
   const [file, setFile] = useState(null)
   const [uploading, setUploading] = useState(false)
@@ -140,12 +138,19 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
   const [confirmed, setConfirmed] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
-  const [progress, setProgress] = useState(null)
+  const [progressStage, setProgressStage] = useState(null)
   const progressPollRef = useRef(null)
   const lastStageRef = useRef(null)
+  const pctRef = useRef(null)
+  const msgRef = useRef(null)
 
   function stopPolling() {
     if (progressPollRef.current) { clearInterval(progressPollRef.current); progressPollRef.current = null }
+  }
+
+  function _updateText(percent, message) {
+    if (pctRef.current) pctRef.current.textContent = `${percent}%`
+    if (msgRef.current) msgRef.current.textContent = message || 'Processing…'
   }
 
   function startProgressPolling() {
@@ -154,12 +159,10 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
       try {
         const r = await api.get('/admin/upload/progress')
         const { stage, percent, message } = r.data
-        if (stage !== lastStageRef.current || stage === 'done' || stage === 'error') {
+        _updateText(percent, message)
+        if (stage !== lastStageRef.current) {
           lastStageRef.current = stage
-          setProgress({ stage, percent, message })
-        } else {
-          // update percent text only (no re-render of bar shape)
-          setProgress(prev => prev ? { ...prev, percent, message } : prev)
+          setProgressStage(stage)
         }
         if (stage === 'done' || stage === 'error') {
           clearInterval(progressPollRef.current); progressPollRef.current = null
@@ -183,8 +186,9 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
     if (!file || !confirmed) return
     setUploading(true)
     setError('')
-    lastStageRef.current = null
-    setProgress({ stage: 'uploading', percent: 0, message: 'Uploading file…' })
+    lastStageRef.current = 'uploading'
+    setProgressStage('uploading')
+    _updateText(0, 'Uploading file…')
     try {
       const fd = new FormData()
       fd.append('file', file)
@@ -202,12 +206,14 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
       if (data.training_async) {
         startProgressPolling()
       } else {
-        setProgress({ stage: 'done', percent: 100, message: 'Complete!' })
+        lastStageRef.current = 'done'
+        setProgressStage('done')
+        _updateText(100, 'Complete!')
         onStatusRefresh()
       }
     } catch (err) {
       stopPolling()
-      setProgress(null)
+      setProgressStage(null)
       setError(err.response?.data?.error || err.message || 'Upload failed. Please try again.')
     } finally {
       setUploading(false)
@@ -218,7 +224,7 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
     stopPolling()
     lastStageRef.current = null
     setFile(null); setDone(false); setConfirmed(false)
-    setResult(null); setError(''); setProgress(null)
+    setResult(null); setError(''); setProgressStage(null)
   }
 
   return (
@@ -250,7 +256,7 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
         </div>
       )}
 
-      <ProgressSection progress={progress} steps={STEPS_NEW} />
+      <ProgressSection stage={progressStage} steps={STEPS_NEW} pctRef={pctRef} msgRef={msgRef} />
 
       {/* Import result */}
       {result?.import && (
@@ -341,12 +347,19 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
   const [conflict, setConflict] = useState(null)
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
-  const [progress, setProgress] = useState(null) // {percent, message, stage}
+  const [progressStage, setProgressStage] = useState(null)
   const progressPollRef = useRef(null)
   const lastStageRef = useRef(null)
+  const pctRef = useRef(null)
+  const msgRef = useRef(null)
 
   function stopPolling() {
     if (progressPollRef.current) { clearInterval(progressPollRef.current); progressPollRef.current = null }
+  }
+
+  function _updateText(percent, message) {
+    if (pctRef.current) pctRef.current.textContent = `${percent}%`
+    if (msgRef.current) msgRef.current.textContent = message || 'Processing…'
   }
 
   function startProgressPolling() {
@@ -355,11 +368,10 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
       try {
         const r = await api.get('/admin/upload/progress')
         const { stage, percent, message } = r.data
-        if (stage !== lastStageRef.current || stage === 'done' || stage === 'error') {
+        _updateText(percent, message)
+        if (stage !== lastStageRef.current) {
           lastStageRef.current = stage
-          setProgress({ stage, percent, message })
-        } else {
-          setProgress(prev => prev ? { ...prev, percent, message } : prev)
+          setProgressStage(stage)
         }
         if (stage === 'done' || stage === 'error') {
           clearInterval(progressPollRef.current); progressPollRef.current = null
@@ -409,8 +421,9 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
     if (!file) return
     setUploading(true)
     setError('')
-    lastStageRef.current = null
-    setProgress({ stage: 'uploading', percent: 0, message: 'Uploading file…' })
+    lastStageRef.current = 'uploading'
+    setProgressStage('uploading')
+    _updateText(0, 'Uploading file…')
     try {
       const fd = new FormData()
       fd.append('file', file)
@@ -429,7 +442,7 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
       } catch (err) {
         if (err.response?.status === 409 && err.response?.data?.year_conflict) {
           setConflict({ year: err.response.data.year, existing_count: err.response.data.existing_count })
-          setProgress(null)
+          setProgressStage(null)
           return
         }
         throw new Error(err.response?.data?.error || err.message || 'Upload failed')
@@ -444,12 +457,14 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
       if (data1.training_async) {
         startProgressPolling()
       } else {
-        setProgress({ stage: 'done', percent: 100, message: 'Complete!' })
+        lastStageRef.current = 'done'
+        setProgressStage('done')
+        _updateText(100, 'Complete!')
         onStatusRefresh()
       }
     } catch (err) {
       stopPolling()
-      setProgress(null)
+      setProgressStage(null)
       setError(err.message || 'Upload failed. Please try again.')
     } finally {
       setUploading(false)
@@ -461,7 +476,7 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
     lastStageRef.current = null
     setFile(null); setModelName(''); setDone(false)
     setResult(null); setConflict(null); setError('')
-    setProgress(null)
+    setProgressStage(null)
     setCreateAccounts(true); setSkipEmail(false)
     setDatasetYear(nextAllowed ?? currentYear)
   }
@@ -593,7 +608,7 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
         </div>
       )}
 
-      <ProgressSection progress={progress} steps={STEPS_ADD} />
+      <ProgressSection stage={progressStage} steps={STEPS_ADD} pctRef={pctRef} msgRef={msgRef} />
 
       {/* Results */}
       {result && (
