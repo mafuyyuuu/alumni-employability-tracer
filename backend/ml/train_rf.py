@@ -35,23 +35,23 @@ def _best_model(X_train, y_train, X_test, y_test):
 
     candidates = {
         'GradientBoosting': GradientBoostingClassifier(
-            n_estimators=300,
-            max_depth=5,
-            learning_rate=0.05,
+            n_estimators=100,
+            max_depth=4,
+            learning_rate=0.1,
             min_samples_split=4,
             min_samples_leaf=2,
             subsample=0.85,
             random_state=42,
         ),
         'RandomForest': RandomForestClassifier(
-            n_estimators=500,
-            max_depth=20,
+            n_estimators=150,
+            max_depth=12,
             min_samples_split=4,
             min_samples_leaf=2,
             max_features='sqrt',
             class_weight='balanced',
             random_state=42,
-            n_jobs=-1,
+            n_jobs=1,
         ),
     }
 
@@ -60,7 +60,7 @@ def _best_model(X_train, y_train, X_test, y_test):
     best_model_obj = None
 
     for name, clf in candidates.items():
-        cv_scores = cross_val_score(clf, X_train, y_train, cv=cv, scoring='accuracy', n_jobs=-1)
+        cv_scores = cross_val_score(clf, X_train, y_train, cv=cv, scoring='accuracy', n_jobs=1)
         mean_cv = cv_scores.mean()
         print(f"  {name}: CV accuracy = {mean_cv*100:.2f}% (+/- {cv_scores.std()*100:.2f}%)")
         if mean_cv > best_cv_score:

@@ -53,7 +53,7 @@ def train_linear_employability(database_path: Optional[str] = None) -> dict:
     ])
 
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    cv_scores = cross_val_score(pipeline, X_train, y_train, cv=cv, scoring='accuracy', n_jobs=-1)
+    cv_scores = cross_val_score(pipeline, X_train, y_train, cv=cv, scoring='accuracy', n_jobs=1)
     print(f"  LR CV accuracy: {cv_scores.mean()*100:.2f}% (+/- {cv_scores.std()*100:.2f}%)")
 
     pipeline.fit(X_train, y_train)
