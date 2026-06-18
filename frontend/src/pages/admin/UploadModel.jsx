@@ -184,9 +184,9 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
       try {
         const r = await api.get('/admin/upload/progress')
         const { stage, percent, message } = r.data
+        if (stage === 'idle') return  // server not started yet — skip everything
         _updateText(percent, message)
-        // Ignore 'idle' — it means the server hasn't started yet; don't unmount the bar
-        if (stage !== 'idle' && stage !== lastStageRef.current) {
+        if (stage !== lastStageRef.current) {
           lastStageRef.current = stage
           setProgressStage(stage)
         }
@@ -394,9 +394,9 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
       try {
         const r = await api.get('/admin/upload/progress')
         const { stage, percent, message } = r.data
+        if (stage === 'idle') return  // server not started yet — skip everything
         _updateText(percent, message)
-        // Ignore 'idle' — it means the server hasn't started yet; don't unmount the bar
-        if (stage !== 'idle' && stage !== lastStageRef.current) {
+        if (stage !== lastStageRef.current) {
           lastStageRef.current = stage
           setProgressStage(stage)
         }
