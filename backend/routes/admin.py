@@ -974,7 +974,7 @@ def list_users():
         }
         all_rows.append(ds_user)
 
-    SCORE_THRESHOLD = 72  # high score ≥ 80
+    SCORE_THRESHOLD = 75  # high score ≥ 75
     FAST_MONTHS     = 4   # fast employment ≤ 4 months
 
     # Latest uploaded dataset year = graduating students reference year
@@ -1137,18 +1137,18 @@ def list_users():
     emp_counts = db.execute(f"""
         SELECT
             SUM(CASE
-                WHEN employed=1 AND months_to_employment IS NOT NULL AND {_s}>=80 AND months_to_employment<=4 THEN 1
-                WHEN employed=1 AND months_to_employment IS NULL     AND {_s}>=80 THEN 1
-                WHEN employed=0                                      AND {_s}>=80 THEN 1
+                WHEN employed=1 AND months_to_employment IS NOT NULL AND {_s}>=75 AND months_to_employment<=4 THEN 1
+                WHEN employed=1 AND months_to_employment IS NULL     AND {_s}>=75 THEN 1
+                WHEN employed=0                                      AND {_s}>=75 THEN 1
                 ELSE 0 END) AS likely,
             SUM(CASE
-                WHEN employed=1 AND months_to_employment IS NOT NULL AND {_s}>=80 AND months_to_employment>4 THEN 1
-                WHEN employed=1 AND months_to_employment IS NOT NULL AND {_s}<80  AND months_to_employment<=4 THEN 1
-                WHEN employed=1 AND months_to_employment IS NULL     AND {_s}<80  THEN 1
+                WHEN employed=1 AND months_to_employment IS NOT NULL AND {_s}>=75 AND months_to_employment>4 THEN 1
+                WHEN employed=1 AND months_to_employment IS NOT NULL AND {_s}<75  AND months_to_employment<=4 THEN 1
+                WHEN employed=1 AND months_to_employment IS NULL     AND {_s}<75  THEN 1
                 ELSE 0 END) AS employable,
             SUM(CASE
-                WHEN employed=1 AND months_to_employment IS NOT NULL AND {_s}<80 AND months_to_employment>4 THEN 1
-                WHEN employed=0                                      AND {_s}<80 THEN 1
+                WHEN employed=1 AND months_to_employment IS NOT NULL AND {_s}<75 AND months_to_employment>4 THEN 1
+                WHEN employed=0                                      AND {_s}<75 THEN 1
                 ELSE 0 END) AS least
         FROM ml_training_rows WHERE is_active = 1
     """).fetchone()
@@ -1290,7 +1290,7 @@ def predict_graduating():
     if LATEST_YEAR not in available_years:
         LATEST_YEAR = latest
 
-    SCORE_THRESHOLD = 72
+    SCORE_THRESHOLD = 75
     FAST_MONTHS = 4
 
     hist_rows = db.execute("""
@@ -1792,7 +1792,7 @@ def user_insights(user_id):
         return jsonify({'error': f'User {user_id_str} not found'}), 404
 
     course = u.get('course')
-    SCORE_THRESHOLD = 50
+    SCORE_THRESHOLD = 75
     FAST_MONTHS     = 6
 
     lr = db.execute(
