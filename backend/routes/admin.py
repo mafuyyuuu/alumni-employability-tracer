@@ -382,6 +382,12 @@ def _ensure_employment_data_from_training(db):
     if not rows:
         return False
 
+    # Remove stale years that no longer exist in training data
+    active_years = [r['year'] for r in rows]
+    placeholders = ','.join('?' * len(active_years))
+    db.execute(f"DELETE FROM employment_data WHERE year NOT IN ({placeholders})", active_years)
+    db.commit()
+
     for row in rows:
         total = row['total'] or 0
         if total <= 0:
@@ -3594,6 +3600,12 @@ def delete_training_data_by_year(year):
     cur = db.execute("DELETE FROM ml_training_rows WHERE graduation_year = ?", [year])
     db.execute("DELETE FROM employment_data WHERE year = ?", [year])
     db.execute("DELETE FROM program_rates WHERE year = ?", [year])
+    # Invalidate forecast and predict caches so stale data isn't shown
+    try:
+        db.execute("DELETE FROM app_cache WHERE key='forecast'")
+        db.execute("DELETE FROM app_cache WHERE key LIKE 'predict_%'")
+    except Exception:
+        pass
     # Also delete alumni accounts tied to this graduation year
     alumni_cur = db.execute(
         "DELETE FROM users WHERE role='alumni' AND graduation_year=? AND (is_test_account=0 OR is_test_account IS NULL)",
