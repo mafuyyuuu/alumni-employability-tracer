@@ -12,6 +12,7 @@ const typeStyle = {
 
 export default function AdminJobs() {
   const [jobs, setJobs] = useState([])
+  const [companies, setCompanies] = useState([])
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [deleteId, setDeleteId] = useState(null)
@@ -22,7 +23,15 @@ export default function AdminJobs() {
     api.get('/jobs').then(r => setJobs(r.data.jobs || [])).catch(() => {}).finally(() => setLoading(false))
   }
 
-  useEffect(() => { fetchJobs() }, [])
+  useEffect(() => {
+    fetchJobs()
+    api.get('/admin/company-accounts').then(r => {
+      const accounts = r.data.accounts || []
+      setCompanies(accounts.filter(a => a.company_name).length > 0
+        ? accounts.filter(a => a.company_name)
+        : accounts)
+    }).catch(() => {})
+  }, [])
 
   const filtered = jobs.filter(j =>
     j.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -82,8 +91,15 @@ export default function AdminJobs() {
             <form onSubmit={addJob} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <input required placeholder="Job title" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
                 className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2" style={{ '--tw-ring-color': 'rgba(15,45,26,0.2)' }} />
-              <input required placeholder="Company" value={form.company} onChange={e => setForm(p => ({ ...p, company: e.target.value }))}
-                className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2" style={{ '--tw-ring-color': 'rgba(15,45,26,0.2)' }} />
+              <select required value={form.company} onChange={e => setForm(p => ({ ...p, company: e.target.value }))}
+                className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-white focus:outline-none focus:ring-2" style={{ '--tw-ring-color': 'rgba(15,45,26,0.2)' }}>
+                <option value="">Select Company</option>
+                {companies.map(c => (
+                  <option key={c.id} value={c.company_name || c.name}>
+                    {c.company_name || c.name}
+                  </option>
+                ))}
+              </select>
               <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}
                 className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-white focus:outline-none">
                 {['Full-time', 'Part-time', 'Contract', 'Internship'].map(t => <option key={t}>{t}</option>)}
