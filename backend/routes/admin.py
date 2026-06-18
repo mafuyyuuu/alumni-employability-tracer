@@ -1366,19 +1366,19 @@ def predict_graduating():
         if combined >= 0.50: return round(4 + (1 - combined) * 12)  # 4-7 months
         return round(7 + (0.5 - combined) * 16)                     # 7-15 months
 
-    def _tier(score, rf_prob, knn_emp_rate):
+    def _tier(score, est_months):
         """
-        Likely Employable  : score >= 75 AND months <= 6 (handled by caller)
-        Employable         : score >= 75 but slow, OR score < 75 but fast
-        Least Employable   : score < 75 AND slow
+        2×2 matrix — same rule as the main tier logic:
+          score >= 75 AND months <= 6  → Likely Employable
+          score >= 75 AND months >  6  → Employable
+          score <  75 AND months <= 6  → Employable
+          score <  75 AND months >  6  → Least Employable
         """
-        knn = knn_emp_rate if knn_emp_rate is not None else 0.5
-        rf  = rf_prob      if rf_prob      is not None else 0.5
-        if score >= 75 and (rf >= 0.55 or knn >= 0.60):
-            return 'Likely Employable'
-        if score >= 55 or rf >= 0.50 or knn >= 0.50:
-            return 'Employable'
-        return 'Least Employable'
+        high = score >= 75
+        fast = est_months is not None and est_months <= 6
+        if high and fast:   return 'Likely Employable'
+        if not high and not fast: return 'Least Employable'
+        return 'Employable'
 
     reg_rows = db.execute(
         "SELECT * FROM users WHERE role='alumni' AND graduation_year=? AND (employed=0 OR employed IS NULL)",
@@ -1434,8 +1434,8 @@ def predict_graduating():
             rf_prob      = float(pred.get('probability_employed') or 0.5)
             knn_emp_rate = _knn_emp_rate(r)
             score        = _score(r)
-            tier         = _tier(score, rf_prob, knn_emp_rate)
             est_months   = _estimate_months(rf_prob, knn_emp_rate)
+            tier         = _tier(score, est_months)
             all_results.append({
                 'id': r['id'], 'name': r.get('name') or 'Unknown',
                 'email': r.get('email', ''), 'course': r.get('course', ''),
