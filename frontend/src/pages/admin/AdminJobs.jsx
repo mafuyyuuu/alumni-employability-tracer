@@ -25,12 +25,7 @@ export default function AdminJobs() {
 
   useEffect(() => {
     fetchJobs()
-    api.get('/admin/company-accounts').then(r => {
-      const accounts = r.data.accounts || []
-      setCompanies(accounts.filter(a => a.company_name).length > 0
-        ? accounts.filter(a => a.company_name)
-        : accounts)
-    }).catch(() => {})
+    api.get('/companies').then(r => setCompanies(r.data.companies || [])).catch(() => {})
   }, [])
 
   const filtered = jobs.filter(j =>
@@ -95,9 +90,7 @@ export default function AdminJobs() {
                 className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-white focus:outline-none focus:ring-2" style={{ '--tw-ring-color': 'rgba(15,45,26,0.2)' }}>
                 <option value="">Select Company</option>
                 {companies.map(c => (
-                  <option key={c.id} value={c.company_name || c.name}>
-                    {c.company_name || c.name}
-                  </option>
+                  <option key={c.id} value={c.name}>{c.name}</option>
                 ))}
               </select>
               <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}
