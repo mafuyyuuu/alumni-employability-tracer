@@ -80,6 +80,7 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
   const [trainingStatus, setTrainingStatus] = useState(null)
   const trainingPollRef = useRef(null)
   const progressPollRef = useRef(null)
+  const progressFloorRef = useRef(0)
 
   function stopPolling() {
     if (trainingPollRef.current) { clearInterval(trainingPollRef.current); trainingPollRef.current = null }
@@ -88,18 +89,18 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
 
   function startProgressPolling() {
     if (progressPollRef.current) clearInterval(progressPollRef.current)
-    let lastPct = 0
     progressPollRef.current = setInterval(async () => {
       try {
         const r = await api.get('/admin/upload/progress')
         const { stage, percent, message } = r.data
-        const eff = Math.max(percent, lastPct); lastPct = eff
+        const eff = Math.max(percent, progressFloorRef.current)
+        progressFloorRef.current = eff
         setProgress({ stage, percent: eff, message })
         if (stage === 'done' || stage === 'error') {
-          clearInterval(progressPollRef.current); progressPollRef.current = null; stopPolling()
+          clearInterval(progressPollRef.current); progressPollRef.current = null
         }
       } catch { /* ignore */ }
-    }, 600)
+    }, 700)
   }
 
   function startTrainingPolling() {
@@ -116,7 +117,7 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
           onStatusRefresh()
         } else if (s === 'error') {
           stopPolling()
-          setProgress({ stage: 'error', percent: 0, message: r.data.error || 'Training failed' })
+          setProgress({ stage: 'error', percent: progressFloorRef.current, message: r.data.error || 'Training failed' })
           setError(`Model retraining failed: ${r.data.error || 'Unknown error'}`)
         }
       } catch { clearInterval(trainingPollRef.current); trainingPollRef.current = null }
@@ -129,8 +130,8 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
     if (!file || !confirmed) return
     setUploading(true)
     setError('')
+    progressFloorRef.current = 0
     setProgress({ stage: 'uploading', percent: 0, message: 'Uploading file…' })
-    startProgressPolling()
     try {
       const fd = new FormData()
       fd.append('file', file)
@@ -147,9 +148,9 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
       onYearsRefresh()
       if (data.training_async) {
         setTrainingStatus('running')
+        startProgressPolling()
         startTrainingPolling()
       } else {
-        stopPolling()
         setProgress({ stage: 'done', percent: 100, message: 'Complete!' })
         onStatusRefresh()
       }
@@ -164,6 +165,7 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
 
   function reset() {
     stopPolling()
+    progressFloorRef.current = 0
     setFile(null); setDone(false); setConfirmed(false)
     setResult(null); setError(''); setProgress(null); setTrainingStatus(null)
   }
@@ -207,8 +209,12 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
             </span>
           </div>
           <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-            <div className="h-2.5 rounded-full transition-all duration-300"
-              style={{ width: `${progress.percent}%`, background: progress.stage === 'done' ? '#16a34a' : progress.stage === 'error' ? '#dc2626' : '#0f2d1a' }} />
+            <div className="h-2.5 rounded-full"
+              style={{
+                width: `${progress.percent}%`,
+                background: progress.stage === 'done' ? '#16a34a' : progress.stage === 'error' ? '#dc2626' : '#0f2d1a',
+                transition: 'width 0.5s ease-out',
+              }} />
           </div>
           <div className="flex gap-4 mt-2">
             {[
@@ -318,6 +324,7 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
   const [progress, setProgress] = useState(null) // {percent, message, stage}
   const trainingPollRef = useRef(null)
   const progressPollRef = useRef(null)
+  const progressFloorRef = useRef(0)
 
   function stopPolling() {
     if (trainingPollRef.current)  { clearInterval(trainingPollRef.current);  trainingPollRef.current = null }
@@ -326,21 +333,18 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
 
   function startProgressPolling() {
     if (progressPollRef.current) clearInterval(progressPollRef.current)
-    let lastBackendPercent = 0
     progressPollRef.current = setInterval(async () => {
       try {
         const r = await api.get('/admin/upload/progress')
         const { stage, percent, message } = r.data
-        // Always move forward — never go backwards
-        const effective = Math.max(percent, lastBackendPercent)
-        lastBackendPercent = effective
+        const effective = Math.max(percent, progressFloorRef.current)
+        progressFloorRef.current = effective
         setProgress({ stage, percent: effective, message })
         if (stage === 'done' || stage === 'error') {
           clearInterval(progressPollRef.current); progressPollRef.current = null
-          stopPolling()
         }
       } catch { /* ignore */ }
-    }, 600)
+    }, 700)
   }
 
   function startTrainingPolling() {
@@ -357,7 +361,7 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
           onStatusRefresh()
         } else if (s === 'error') {
           stopPolling()
-          setProgress({ stage: 'error', percent: 0, message: r.data.error || 'Training failed' })
+          setProgress({ stage: 'error', percent: progressFloorRef.current, message: r.data.error || 'Training failed' })
           setError(`Model training failed: ${r.data.error || 'Unknown error'}`)
         }
       } catch { clearInterval(trainingPollRef.current); trainingPollRef.current = null }
@@ -396,10 +400,9 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
     if (!file) return
     setUploading(true)
     setError('')
+    progressFloorRef.current = 0
     setProgress({ stage: 'uploading', percent: 0, message: 'Uploading file…' })
-    startProgressPolling()
     try {
-      // Step 1: upload + training import
       const fd = new FormData()
       fd.append('file', file)
       fd.append('name', modelName || file.name)
@@ -417,6 +420,7 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
       } catch (err) {
         if (err.response?.status === 409 && err.response?.data?.year_conflict) {
           setConflict({ year: err.response.data.year, existing_count: err.response.data.existing_count })
+          setProgress(null)
           return
         }
         throw new Error(err.response?.data?.error || err.message || 'Upload failed')
@@ -424,23 +428,21 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
       onUploaded(data1.upload)
       setConflict(null)
 
-      // Account creation is handled inside the background thread to avoid DB lock
       setResult({ training: data1, accounts: null })
       setDone(true)
       if (applyToTraining) onYearsRefresh()
 
       if (data1.training_async) {
         setTrainingStatus('running')
-        // Both pollers run: progress bar + training completion
+        startProgressPolling()
         startTrainingPolling()
-        // Progress polling already started before upload — keep it running
       } else {
-        // No async training — stop progress polling and refresh status
-        stopPolling()
         setProgress({ stage: 'done', percent: 100, message: 'Complete!' })
         onStatusRefresh()
       }
     } catch (err) {
+      stopPolling()
+      setProgress(null)
       setError(err.message || 'Upload failed. Please try again.')
     } finally {
       setUploading(false)
@@ -449,6 +451,7 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
 
   function reset() {
     stopPolling()
+    progressFloorRef.current = 0
     setFile(null); setModelName(''); setDone(false)
     setResult(null); setConflict(null); setError('')
     setTrainingStatus(null); setProgress(null)
@@ -594,10 +597,11 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
           </div>
           <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
             <div
-              className="h-2.5 rounded-full transition-all duration-300"
+              className="h-2.5 rounded-full"
               style={{
                 width: `${progress.percent}%`,
                 background: progress.stage === 'done' ? '#16a34a' : progress.stage === 'error' ? '#dc2626' : '#0f2d1a',
+                transition: 'width 0.5s ease-out',
               }}
             />
           </div>

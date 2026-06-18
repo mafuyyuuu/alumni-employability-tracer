@@ -3016,6 +3016,7 @@ def _auto_forecast_3yr(db, dataset_year):
 @admin_bp.route('/upload', methods=['POST'])
 @admin_required
 def upload_model():
+    _set_progress('uploading', 0, 'Preparing upload…')
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
 
