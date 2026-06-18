@@ -62,12 +62,15 @@ def _best_model(X_train, y_train, X_test, y_test):
     }
     if _XGB_AVAILABLE:
         candidates['XGBoost'] = XGBClassifier(
-            n_estimators=150,
-            max_depth=4,
+            n_estimators=200,
+            max_depth=5,
             learning_rate=0.1,
             subsample=0.85,
             colsample_bytree=0.8,
-            scale_pos_weight=1,
+            min_child_weight=3,
+            gamma=0.1,
+            reg_alpha=0.1,
+            reg_lambda=1.0,
             random_state=42,
             n_jobs=1,
             eval_metric='logloss',
