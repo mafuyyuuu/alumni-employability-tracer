@@ -169,9 +169,27 @@ def build_feature_matrix(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series, dic
         else 'UNKNOWN'
     )
 
-    # Ensure graduation_year and age are included but aware they are less critical
+    # ── Engineered features (improve accuracy without extra data) ──────────
+    # Weighted grade composite — captures overall academic strength
+    work['grade_composite'] = (
+        work['avg_grade'] * 0.40 +
+        work['avg_prof_grade'] * 0.35 +
+        work['avg_elec_grade'] * 0.25
+    )
+    # Skills index — combined soft + hard skills signal
+    work['skills_index'] = (work['soft_skills'] + work['hard_skills']) / 2.0
+    # Board bonus — interaction: only meaningful when board_passer=1
+    work['board_bonus'] = work['board_passer'] * (work['board_exam_score'] / 100.0)
+    # Grade × skills interaction — strong academic + strong skills = highest signal
+    work['grade_x_skills'] = work['grade_composite'] * work['skills_index'] / 100.0
+
+    ENGINEERED = ['grade_composite', 'skills_index', 'board_bonus', 'grade_x_skills']
+    for col in ENGINEERED:
+        defaults[col] = float(work[col].median())
+
+    all_features = NUMERIC_FEATURES + ENGINEERED + [COURSE_FEATURE]
     X = pd.get_dummies(
-        work[NUMERIC_FEATURES + [COURSE_FEATURE]],
+        work[all_features],
         columns=[COURSE_FEATURE],
         drop_first=False,
     )

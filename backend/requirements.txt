@@ -39,3 +39,4 @@ urllib3==2.6.3
 uvicorn==0.44.0
 Werkzeug==3.1.8
 gunicorn==21.2.0
+xgboost==2.1.4

@@ -11,6 +11,12 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 
 try:
+    from xgboost import XGBClassifier
+    _XGB_AVAILABLE = True
+except ImportError:
+    _XGB_AVAILABLE = False
+
+try:
     from ml.training_data import (
         load_training_dataframe,
         validate_training_dataframe,
@@ -54,6 +60,19 @@ def _best_model(X_train, y_train, X_test, y_test):
             n_jobs=1,
         ),
     }
+    if _XGB_AVAILABLE:
+        candidates['XGBoost'] = XGBClassifier(
+            n_estimators=150,
+            max_depth=4,
+            learning_rate=0.1,
+            subsample=0.85,
+            colsample_bytree=0.8,
+            scale_pos_weight=1,
+            random_state=42,
+            n_jobs=1,
+            eval_metric='logloss',
+            verbosity=0,
+        )
 
     best_name = None
     best_cv_score = -1
