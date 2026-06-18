@@ -1368,15 +1368,15 @@ def predict_graduating():
 
     def _tier(score, rf_prob, knn_emp_rate):
         """
-        Likely Employable  : score >= 72 AND (RF >= 0.55 OR kNN emp rate >= 0.60)
-        Employable         : score >= 58 OR RF >= 0.50 OR kNN emp rate >= 0.50
-        Least Employable   : everything else
+        Likely Employable  : score >= 75 AND months <= 6 (handled by caller)
+        Employable         : score >= 75 but slow, OR score < 75 but fast
+        Least Employable   : score < 75 AND slow
         """
         knn = knn_emp_rate if knn_emp_rate is not None else 0.5
         rf  = rf_prob      if rf_prob      is not None else 0.5
-        if score >= 72 and (rf >= 0.55 or knn >= 0.60):
+        if score >= 75 and (rf >= 0.55 or knn >= 0.60):
             return 'Likely Employable'
-        if score >= 58 or rf >= 0.50 or knn >= 0.50:
+        if score >= 55 or rf >= 0.50 or knn >= 0.50:
             return 'Employable'
         return 'Least Employable'
 
