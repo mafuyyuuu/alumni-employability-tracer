@@ -1,6 +1,5 @@
 """ARIMA-based employment rate forecasting."""
 
-import itertools
 import warnings
 
 import numpy as np
@@ -121,19 +120,14 @@ def _auto_select_order(rates):
     if series_len < 6:
         return DEFAULT_ORDER
 
-    max_pq = 3 if series_len >= 12 else 2
-    d_values = (0, 1, 2) if series_len >= 12 else (0, 1)
-    candidate_orders = list(itertools.product(range(0, max_pq + 1), d_values, range(0, max_pq + 1)))
+    # Fast candidate set — proven good orders for short employment-rate series.
+    # Avoids exhaustive grid search (was 17+ fits × ~2s each = 30+ seconds on Render).
+    FAST_CANDIDATES = [(1,1,0),(0,1,1),(1,1,1),(2,1,0),(0,1,2),(1,0,0),(0,0,1)]
+    candidates = [o for o in FAST_CANDIDATES if sum(o) < series_len]
 
     best_order = None
     best_aic = float('inf')
-    for order in candidate_orders:
-        p, d, q = order
-        if p == 0 and d == 0 and q == 0:
-            continue
-        if p + d + q >= series_len:
-            continue
-
+    for order in candidates:
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
