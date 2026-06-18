@@ -77,14 +77,21 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
   const [progress, setProgress] = useState(null)
-  const [trainingStatus, setTrainingStatus] = useState(null)
-  const trainingPollRef = useRef(null)
   const progressPollRef = useRef(null)
   const progressFloorRef = useRef(0)
+  const lastStageRef = useRef(null)
+  const lastPctRef = useRef(0)
+  const barRef = useRef(null)
 
   function stopPolling() {
-    if (trainingPollRef.current) { clearInterval(trainingPollRef.current); trainingPollRef.current = null }
     if (progressPollRef.current) { clearInterval(progressPollRef.current); progressPollRef.current = null }
+  }
+
+  function _applyBar(pct, stage) {
+    if (!barRef.current) return
+    barRef.current.style.width = `${pct}%`
+    barRef.current.style.backgroundColor =
+      stage === 'done' ? '#16a34a' : stage === 'error' ? '#dc2626' : '#0f2d1a'
   }
 
   function startProgressPolling() {
@@ -95,33 +102,30 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
         const { stage, percent, message } = r.data
         const eff = Math.max(percent, progressFloorRef.current)
         progressFloorRef.current = eff
-        setProgress({ stage, percent: eff, message })
+        // Always move the bar via DOM — no React re-render every tick
+        _applyBar(eff, stage)
+        // Only re-render when stage changes or percent crosses a 5% boundary
+        const stageChanged = stage !== lastStageRef.current
+        const pctJumped = eff - lastPctRef.current >= 5
+        if (stageChanged || pctJumped || stage === 'done' || stage === 'error') {
+          lastStageRef.current = stage
+          lastPctRef.current = eff
+          setProgress({ stage, percent: eff, message })
+        }
         if (stage === 'done' || stage === 'error') {
           clearInterval(progressPollRef.current); progressPollRef.current = null
+          if (stage === 'done') {
+            api.get('/admin/training/status').then(tr => {
+              if (tr.data.status === 'done')
+                setResult(prev => ({ ...prev, forecast: tr.data.result?.forecast }))
+              onStatusRefresh()
+            }).catch(() => onStatusRefresh())
+          } else {
+            setError(`Processing failed: ${message}`)
+          }
         }
       } catch { /* ignore */ }
-    }, 700)
-  }
-
-  function startTrainingPolling() {
-    if (trainingPollRef.current) clearInterval(trainingPollRef.current)
-    trainingPollRef.current = setInterval(async () => {
-      try {
-        const r = await api.get('/admin/training/status')
-        const s = r.data.status
-        setTrainingStatus(s)
-        if (s === 'done') {
-          stopPolling()
-          setProgress({ stage: 'done', percent: 100, message: 'Dataset uploaded and models retrained!' })
-          setResult(prev => ({ ...prev, forecast: r.data.result?.forecast }))
-          onStatusRefresh()
-        } else if (s === 'error') {
-          stopPolling()
-          setProgress({ stage: 'error', percent: progressFloorRef.current, message: r.data.error || 'Training failed' })
-          setError(`Model retraining failed: ${r.data.error || 'Unknown error'}`)
-        }
-      } catch { clearInterval(trainingPollRef.current); trainingPollRef.current = null }
-    }, 2000)
+    }, 800)
   }
 
   useEffect(() => stopPolling, [])
@@ -130,7 +134,7 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
     if (!file || !confirmed) return
     setUploading(true)
     setError('')
-    progressFloorRef.current = 0
+    progressFloorRef.current = 0; lastStageRef.current = null; lastPctRef.current = 0
     setProgress({ stage: 'uploading', percent: 0, message: 'Uploading file…' })
     try {
       const fd = new FormData()
@@ -147,9 +151,7 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
       setDone(true)
       onYearsRefresh()
       if (data.training_async) {
-        setTrainingStatus('running')
         startProgressPolling()
-        startTrainingPolling()
       } else {
         setProgress({ stage: 'done', percent: 100, message: 'Complete!' })
         onStatusRefresh()
@@ -165,10 +167,16 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
 
   function reset() {
     stopPolling()
-    progressFloorRef.current = 0
+    progressFloorRef.current = 0; lastStageRef.current = null; lastPctRef.current = 0
     setFile(null); setDone(false); setConfirmed(false)
-    setResult(null); setError(''); setProgress(null); setTrainingStatus(null)
+    setResult(null); setError(''); setProgress(null)
   }
+
+  const STEPS_NEW = [
+    { label: 'Upload',        done: (p) => p.percent >= 5 },
+    { label: 'Replace data',  done: (p) => p.percent >= 60 },
+    { label: 'Retrain models',done: (p) => p.stage === 'done' },
+  ]
 
   return (
     <div>
@@ -201,32 +209,45 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
 
       {/* Progress bar */}
       {progress && progress.stage !== 'idle' && (
-        <div className="mt-3 rounded-xl border border-gray-200 bg-white px-4 py-3">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs font-semibold text-gray-700">{progress.message || 'Processing…'}</span>
-            <span className="text-xs font-black" style={{ color: progress.stage === 'done' ? '#16a34a' : progress.stage === 'error' ? '#dc2626' : '#0f2d1a' }}>
+        <div className="mt-3 rounded-xl border border-gray-100 bg-white px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-gray-600">{progress.message || 'Processing…'}</span>
+            <span className="text-xs font-bold tabular-nums" style={{ color: progress.stage === 'done' ? '#16a34a' : progress.stage === 'error' ? '#dc2626' : '#374151' }}>
               {progress.percent}%
             </span>
           </div>
-          <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-            <div className="h-2.5 rounded-full"
-              style={{
-                width: `${progress.percent}%`,
-                background: progress.stage === 'done' ? '#16a34a' : progress.stage === 'error' ? '#dc2626' : '#0f2d1a',
-                transition: 'width 0.5s ease-out',
-              }} />
+          <div className="w-full rounded-full h-2 overflow-hidden" style={{ background: '#e5e7eb' }}>
+            <div ref={barRef} style={{
+              height: '100%', borderRadius: '9999px', willChange: 'width',
+              width: `${progress.percent}%`,
+              backgroundColor: progress.stage === 'done' ? '#16a34a' : progress.stage === 'error' ? '#dc2626' : '#0f2d1a',
+              transition: 'width 0.9s cubic-bezier(0.4,0,0.2,1)',
+            }} />
           </div>
-          <div className="flex gap-4 mt-2">
-            {[
-              { label: 'Upload', done: progress.percent >= 5 },
-              { label: 'Replace data', active: progress.stage === 'importing', done: progress.percent >= 60 },
-              { label: 'Retrain models', active: progress.stage === 'training', done: progress.stage === 'done' },
-            ].map(step => (
-              <div key={step.label} className="flex items-center gap-1">
-                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${step.done ? 'bg-green-500' : step.active ? 'bg-yellow-400 animate-pulse' : 'bg-gray-200'}`} />
-                <span className={`text-[10px] font-semibold ${step.done ? 'text-green-600' : step.active ? 'text-yellow-600' : 'text-gray-400'}`}>{step.label}</span>
-              </div>
-            ))}
+          <div className="flex items-center mt-3 gap-1">
+            {STEPS_NEW.map((step, i) => {
+              const isDone = step.done(progress)
+              const isActive = !isDone && (
+                (i === 0 && progress.stage === 'uploading') ||
+                (i === 1 && progress.stage === 'importing') ||
+                (i === 2 && progress.stage === 'training')
+              )
+              return (
+                <div key={step.label} className="flex items-center" style={{ flex: i < STEPS_NEW.length - 1 ? '1' : 'none' }}>
+                  <div className="flex flex-col items-center flex-shrink-0">
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black"
+                      style={{ background: isDone ? '#16a34a' : isActive ? '#f59e0b' : '#e5e7eb', color: isDone || isActive ? '#fff' : '#9ca3af' }}>
+                      {isDone ? '✓' : i + 1}
+                    </div>
+                    <span className="text-[9px] font-semibold mt-0.5 whitespace-nowrap"
+                      style={{ color: isDone ? '#16a34a' : isActive ? '#d97706' : '#9ca3af' }}>{step.label}</span>
+                  </div>
+                  {i < STEPS_NEW.length - 1 && (
+                    <div className="flex-1 h-px mx-1 mb-3.5" style={{ background: isDone ? '#86efac' : '#e5e7eb' }} />
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
@@ -320,15 +341,22 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
   const [conflict, setConflict] = useState(null)
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
-  const [trainingStatus, setTrainingStatus] = useState(null)
   const [progress, setProgress] = useState(null) // {percent, message, stage}
-  const trainingPollRef = useRef(null)
   const progressPollRef = useRef(null)
   const progressFloorRef = useRef(0)
+  const lastStageRef = useRef(null)
+  const lastPctRef = useRef(0)
+  const barRef = useRef(null)
 
   function stopPolling() {
-    if (trainingPollRef.current)  { clearInterval(trainingPollRef.current);  trainingPollRef.current = null }
-    if (progressPollRef.current)  { clearInterval(progressPollRef.current);  progressPollRef.current = null }
+    if (progressPollRef.current) { clearInterval(progressPollRef.current); progressPollRef.current = null }
+  }
+
+  function _applyBar(pct, stage) {
+    if (!barRef.current) return
+    barRef.current.style.width = `${pct}%`
+    barRef.current.style.backgroundColor =
+      stage === 'done' ? '#16a34a' : stage === 'error' ? '#dc2626' : '#0f2d1a'
   }
 
   function startProgressPolling() {
@@ -337,35 +365,30 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
       try {
         const r = await api.get('/admin/upload/progress')
         const { stage, percent, message } = r.data
-        const effective = Math.max(percent, progressFloorRef.current)
-        progressFloorRef.current = effective
-        setProgress({ stage, percent: effective, message })
+        const eff = Math.max(percent, progressFloorRef.current)
+        progressFloorRef.current = eff
+        _applyBar(eff, stage)
+        const stageChanged = stage !== lastStageRef.current
+        const pctJumped = eff - lastPctRef.current >= 5
+        if (stageChanged || pctJumped || stage === 'done' || stage === 'error') {
+          lastStageRef.current = stage
+          lastPctRef.current = eff
+          setProgress({ stage, percent: eff, message })
+        }
         if (stage === 'done' || stage === 'error') {
           clearInterval(progressPollRef.current); progressPollRef.current = null
+          if (stage === 'done') {
+            api.get('/admin/training/status').then(tr => {
+              if (tr.data.status === 'done')
+                setResult(prev => ({ ...prev, training: { ...prev?.training, forecast: tr.data.result?.forecast, models: tr.data.result } }))
+              onStatusRefresh()
+            }).catch(() => onStatusRefresh())
+          } else {
+            setError(`Processing failed: ${message}`)
+          }
         }
       } catch { /* ignore */ }
-    }, 700)
-  }
-
-  function startTrainingPolling() {
-    if (trainingPollRef.current) clearInterval(trainingPollRef.current)
-    trainingPollRef.current = setInterval(async () => {
-      try {
-        const r = await api.get('/admin/training/status')
-        const s = r.data.status
-        setTrainingStatus(s)
-        if (s === 'done') {
-          stopPolling()
-          setProgress({ stage: 'done', percent: 100, message: 'Upload and training complete!' })
-          setResult(prev => ({ ...prev, training: { ...prev?.training, forecast: r.data.result?.forecast, models: r.data.result } }))
-          onStatusRefresh()
-        } else if (s === 'error') {
-          stopPolling()
-          setProgress({ stage: 'error', percent: progressFloorRef.current, message: r.data.error || 'Training failed' })
-          setError(`Model training failed: ${r.data.error || 'Unknown error'}`)
-        }
-      } catch { clearInterval(trainingPollRef.current); trainingPollRef.current = null }
-    }, 2000)
+    }, 800)
   }
 
   useEffect(() => stopPolling, [])
@@ -400,7 +423,7 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
     if (!file) return
     setUploading(true)
     setError('')
-    progressFloorRef.current = 0
+    progressFloorRef.current = 0; lastStageRef.current = null; lastPctRef.current = 0
     setProgress({ stage: 'uploading', percent: 0, message: 'Uploading file…' })
     try {
       const fd = new FormData()
@@ -433,9 +456,7 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
       if (applyToTraining) onYearsRefresh()
 
       if (data1.training_async) {
-        setTrainingStatus('running')
         startProgressPolling()
-        startTrainingPolling()
       } else {
         setProgress({ stage: 'done', percent: 100, message: 'Complete!' })
         onStatusRefresh()
@@ -451,10 +472,10 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
 
   function reset() {
     stopPolling()
-    progressFloorRef.current = 0
+    progressFloorRef.current = 0; lastStageRef.current = null; lastPctRef.current = 0
     setFile(null); setModelName(''); setDone(false)
     setResult(null); setConflict(null); setError('')
-    setTrainingStatus(null); setProgress(null)
+    setProgress(null)
     setCreateAccounts(true); setSkipEmail(false)
     setDatasetYear(nextAllowed ?? currentYear)
   }
@@ -588,34 +609,45 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
 
       {/* Progress bar */}
       {progress && progress.stage !== 'idle' && (
-        <div className="mt-3 rounded-xl border border-gray-200 bg-white px-4 py-3">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs font-semibold text-gray-700">{progress.message || 'Processing…'}</span>
-            <span className="text-xs font-black" style={{ color: progress.stage === 'done' ? '#16a34a' : progress.stage === 'error' ? '#dc2626' : '#0f2d1a' }}>
+        <div className="mt-3 rounded-xl border border-gray-100 bg-white px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-gray-600">{progress.message || 'Processing…'}</span>
+            <span className="text-xs font-bold tabular-nums" style={{ color: progress.stage === 'done' ? '#16a34a' : progress.stage === 'error' ? '#dc2626' : '#374151' }}>
               {progress.percent}%
             </span>
           </div>
-          <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-            <div
-              className="h-2.5 rounded-full"
-              style={{
-                width: `${progress.percent}%`,
-                background: progress.stage === 'done' ? '#16a34a' : progress.stage === 'error' ? '#dc2626' : '#0f2d1a',
-                transition: 'width 0.5s ease-out',
-              }}
-            />
+          <div className="w-full rounded-full h-2 overflow-hidden" style={{ background: '#e5e7eb' }}>
+            <div ref={barRef} style={{
+              height: '100%', borderRadius: '9999px', willChange: 'width',
+              width: `${progress.percent}%`,
+              backgroundColor: progress.stage === 'done' ? '#16a34a' : progress.stage === 'error' ? '#dc2626' : '#0f2d1a',
+              transition: 'width 0.9s cubic-bezier(0.4,0,0.2,1)',
+            }} />
           </div>
-          <div className="flex gap-4 mt-2">
+          <div className="flex items-center mt-3 gap-1">
             {[
-              { label: 'Upload', active: progress.stage === 'uploading', done: progress.percent >= 5 },
-              { label: 'Import rows', active: progress.stage === 'importing', done: progress.percent >= 60 },
-              { label: 'Train models', active: progress.stage === 'training', done: progress.stage === 'done' },
-            ].map(step => (
-              <div key={step.label} className="flex items-center gap-1">
-                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${step.done ? 'bg-green-500' : step.active ? 'bg-yellow-400 animate-pulse' : 'bg-gray-200'}`} />
-                <span className={`text-[10px] font-semibold ${step.done ? 'text-green-600' : step.active ? 'text-yellow-600' : 'text-gray-400'}`}>{step.label}</span>
-              </div>
-            ))}
+              { label: 'Upload',       done: (p) => p.percent >= 5,        active: (p) => p.stage === 'uploading' },
+              { label: 'Import rows',  done: (p) => p.percent >= 60,       active: (p) => p.stage === 'importing' },
+              { label: 'Train models', done: (p) => p.stage === 'done',    active: (p) => p.stage === 'training'  },
+            ].map((step, i, arr) => {
+              const isDone = step.done(progress)
+              const isActive = !isDone && step.active(progress)
+              return (
+                <div key={step.label} className="flex items-center" style={{ flex: i < arr.length - 1 ? '1' : 'none' }}>
+                  <div className="flex flex-col items-center flex-shrink-0">
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black"
+                      style={{ background: isDone ? '#16a34a' : isActive ? '#f59e0b' : '#e5e7eb', color: isDone || isActive ? '#fff' : '#9ca3af' }}>
+                      {isDone ? '✓' : i + 1}
+                    </div>
+                    <span className="text-[9px] font-semibold mt-0.5 whitespace-nowrap"
+                      style={{ color: isDone ? '#16a34a' : isActive ? '#d97706' : '#9ca3af' }}>{step.label}</span>
+                  </div>
+                  {i < arr.length - 1 && (
+                    <div className="flex-1 h-px mx-1 mb-3.5" style={{ background: isDone ? '#86efac' : '#e5e7eb' }} />
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
