@@ -61,17 +61,41 @@ export default function Predict() {
       .finally(() => setInsightsLoading(false))
   }
 
+  const [allStudents, setAllStudents] = useState([])
+
+  // Load from cache on mount — instant. Falls back to full compute if cache empty.
   useEffect(() => {
     setLoading(true)
     setError('')
-    const params = new URLSearchParams()
-    if (search) params.set('search', search)
-    if (tierFilter !== 'All') params.set('tier', tierFilter)
-    api.get(`/admin/predict?${params}`)
-      .then(r => { setData(r.data); setPage(1) })
+    api.get('/admin/predict/cached')
+      .then(r => {
+        if (r.data.students?.length) {
+          setAllStudents(r.data.students)
+          setData(r.data)
+        } else {
+          // Cache empty — run full prediction (slow, but only once)
+          return api.get('/admin/predict').then(r2 => {
+            setAllStudents(r2.data.students || [])
+            setData(r2.data)
+          })
+        }
+      })
       .catch(e => setError(e.response?.data?.error || 'Failed to load predictions.'))
       .finally(() => setLoading(false))
-  }, [search, tierFilter])
+  }, [])
+
+  // Filter client-side — instant, no server round-trip
+  useEffect(() => {
+    if (!allStudents.length) return
+    let filtered = allStudents
+    if (tierFilter !== 'All') filtered = filtered.filter(s => s.tier === tierFilter)
+    if (search) {
+      const q = search.toLowerCase()
+      filtered = filtered.filter(s => s.name?.toLowerCase().includes(q) || s.course?.toLowerCase().includes(q))
+    }
+    setData(prev => prev ? { ...prev, students: filtered } : prev)
+    setPage(1)
+  }, [search, tierFilter, allStudents])
 
   const students = data?.students || []
   const summary = data?.summary || { high: 0, employable: 0, least: 0, total: 0 }

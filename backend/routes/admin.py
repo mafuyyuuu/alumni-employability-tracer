@@ -1260,6 +1260,30 @@ def list_users():
     }), 200
 
 
+@admin_bp.route('/predict/cached', methods=['GET'])
+@admin_required
+def predict_cached():
+    """Return cached predict result instantly — no ML computation."""
+    import json as _json
+    db = get_db()
+    year_rows = db.execute(
+        "SELECT DISTINCT graduation_year FROM ml_training_rows WHERE is_active=1 ORDER BY graduation_year DESC"
+    ).fetchall()
+    available_years = [r['graduation_year'] for r in year_rows]
+    latest = available_years[0] if available_years else None
+    try:
+        year = int(request.args.get('year', latest or 0))
+    except (TypeError, ValueError):
+        year = latest
+    try:
+        row = db.execute("SELECT value FROM app_cache WHERE key=?", [f'predict_{year}']).fetchone()
+        if row:
+            return jsonify(_json.loads(row['value'])), 200
+    except Exception:
+        pass
+    return jsonify({'students': [], 'summary': {}, 'cached': False}), 200
+
+
 @admin_bp.route('/predict', methods=['GET'])
 @admin_required
 def predict_graduating():
@@ -1460,18 +1484,31 @@ def predict_graduating():
         'total':      len(all_results),
     }
 
+    full_payload = {
+        'students': all_results,   # full unfiltered list
+        'summary': summary,
+        'graduation_year': LATEST_YEAR,
+        'available_years': available_years,
+    }
+
+    # Persist to DB cache so next page load is instant
+    import json as _json
+    try:
+        cache_key = f'predict_{LATEST_YEAR}'
+        db.execute("INSERT OR REPLACE INTO app_cache (key, value, updated_at) VALUES (?, ?, datetime('now'))",
+                   [cache_key, _json.dumps(full_payload)])
+        db.commit()
+    except Exception:
+        pass
+
+    # Apply search/filter for the current response (frontend also filters from cache)
     filtered = all_results
     if filter_tier != 'All':
         filtered = [r for r in filtered if r['tier'] == filter_tier]
     if search:
         filtered = [r for r in filtered if search in r['name'].lower() or search in r['course'].lower()]
 
-    return jsonify({
-        'students': filtered,
-        'summary': summary,
-        'graduation_year': LATEST_YEAR,
-        'available_years': available_years,
-    }), 200
+    return jsonify({**full_payload, 'students': filtered}), 200
 
 
 @admin_bp.route('/predict/insights/<path:student_id>', methods=['GET'])
