@@ -105,11 +105,29 @@ def run_rf_forecast(rates, horizon=3):
     r2 = float(np.clip(max(rf_r2, poly_r2), 0.0, 1.0))
 
     window = normalized_rates[-lag:]
-    forecast_values = []
+    rf_forecast = []
     for _ in range(horizon):
         next_val = float(model.predict(np.array([window], dtype=float))[0])
-        forecast_values.append(round(next_val, 1))
+        rf_forecast.append(round(next_val, 1))
         window = window[1:] + [next_val]
+
+    # If RF predicts a flat line (all values within 0.5% of each other),
+    # fall back to polynomial trend extrapolation for more meaningful projections.
+    rf_range = max(rf_forecast) - min(rf_forecast)
+    if rf_range < 0.5 and ss_tot > 0:
+        # Use best-fitting polynomial trend to extrapolate
+        try:
+            # Linear trend only — avoids aggressive quadratic overshoot
+            best_coeffs = np.polyfit(x_full, all_rates, 1)
+            n = len(all_rates)
+            forecast_values = [
+                round(float(np.clip(np.polyval(best_coeffs, n + i), 0, 98)), 1)
+                for i in range(horizon)
+            ]
+        except Exception:
+            forecast_values = rf_forecast
+    else:
+        forecast_values = rf_forecast
 
     return {
         'forecast_values': forecast_values,
