@@ -65,9 +65,10 @@ export default function Forecasting() {
   }
 
   useEffect(() => {
-    api.post('/admin/forecasting/run-all', { horizon: 3 }).then(applyResult).catch(() => {
-      api.get('/admin/forecasting').then(r => setRawData(r.data.forecast_data || [])).catch(() => {})
-    })
+    // Load cached result instantly (no computation on page load)
+    api.get('/admin/forecasting/run-all').then(r => {
+      if (r.data.data?.length) applyResult(r)
+    }).catch(() => {})
     api.get('/admin/forecasting').then(r => setCourseData(r.data.course_data || [])).catch(() => {})
   }, [])
 

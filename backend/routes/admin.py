@@ -3209,11 +3209,21 @@ def upload_progress():
 
 # ── All-Models Forecasting ─────────────────────────────────────────────────
 
+_forecast_cache = {'result': None, 'horizon': None}
+
+@admin_bp.route('/forecasting/run-all', methods=['GET'])
+@admin_required
+def get_forecast_cache():
+    """Return cached forecast result instantly (no computation)."""
+    if _forecast_cache['result']:
+        return jsonify(_forecast_cache['result']), 200
+    return jsonify({'data': [], 'projections': {}, 'metrics': {}, 'cached': False}), 200
+
 @admin_bp.route('/forecasting/run-all', methods=['POST'])
 @admin_required
 def run_forecasting_all_models():
     """Run all 3 models and return combined chart data for merged graph."""
-    data = request.get_json()
+    data = request.get_json() or {}
     horizon = int(data.get('horizon', 3))
 
     db = get_db()
@@ -3262,13 +3272,17 @@ def run_forecasting_all_models():
     chart_data = list(combined.values())
     chart_data.sort(key=lambda x: x['year'])
 
-    return jsonify({
+    result = {
         'data': chart_data,
         'historical': historical,
         'projections': projections,
         'metrics': metrics_all,
         'horizon': horizon,
-    }), 200
+        'cached': True,
+    }
+    _forecast_cache['result'] = result
+    _forecast_cache['horizon'] = horizon
+    return jsonify(result), 200
 
 
 # ── Programs Management ────────────────────────────────────────────────────
