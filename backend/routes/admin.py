@@ -3255,7 +3255,7 @@ def upload_progress():
 @admin_bp.route('/forecasting/run-all', methods=['GET'])
 @admin_required
 def get_forecast_cache():
-    """Return DB-persisted forecast cache instantly — survives server restarts."""
+    """Return cached forecast. If cache is empty but training data exists, auto-run and cache."""
     import json as _json
     db = get_db()
     try:
@@ -3265,6 +3265,48 @@ def get_forecast_cache():
             return jsonify(_json.loads(row['value'])), 200
     except Exception:
         pass
+
+    # Cache is empty — check if training data exists and auto-run forecast
+    try:
+        has_data = db.execute(
+            "SELECT 1 FROM ml_training_rows WHERE is_active=1 LIMIT 1"
+        ).fetchone()
+        if has_data:
+            # Run inline (small datasets are fast enough for a GET)
+            _ensure_employment_data_from_training(db)
+            emp_rows = db.execute(
+                "SELECT year, overall_rate FROM employment_data ORDER BY year"
+            ).fetchall()
+            if emp_rows:
+                rates = [r['overall_rate'] for r in emp_rows]
+                years = [r['year'] for r in emp_rows]
+                combined = {str(r['year']): {'year': str(r['year']), 'rate': r['overall_rate']} for r in emp_rows}
+                projections, metrics_all = {}, {}
+                for key, model_str in [('rf','Random Forest'),('arima','Auto ARIMA (AIC search)'),('lr','Linear Regression')]:
+                    try:
+                        result = _forecast_result_for_model(rates, horizon=3, model_str=model_str)
+                        fv = result.get('forecast_values', [])
+                        for i, val in enumerate(fv):
+                            yr = str(max(years) + i + 1)
+                            if yr not in combined:
+                                combined[yr] = {'year': yr, 'forecast': True}
+                            combined[yr][key] = val
+                        projections[key] = [{'year': str(max(years)+i+1), 'val': f"{v}%"} for i, v in enumerate(fv)]
+                        metrics_all[key] = result.get('metrics', {})
+                    except Exception:
+                        pass
+                chart_data = sorted(combined.values(), key=lambda x: x['year'])
+                payload = {'data': list(chart_data), 'projections': projections, 'metrics': metrics_all, 'horizon': 3, 'cached': True}
+                try:
+                    db.execute("INSERT OR REPLACE INTO app_cache (key, value, updated_at) VALUES ('forecast',?,datetime('now'))",
+                               [_json.dumps(payload)])
+                    db.commit()
+                except Exception:
+                    pass
+                return jsonify(payload), 200
+    except Exception:
+        pass
+
     return jsonify({'data': [], 'projections': {}, 'metrics': {}, 'cached': False}), 200
 
 @admin_bp.route('/forecasting/run-all', methods=['POST'])
