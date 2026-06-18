@@ -1086,12 +1086,9 @@ def list_users():
 
         rf_p = rf_probability if rf_probability is not None else 0.5
 
-        # Latest-year students (graduating/new alumni) — always use RF + score
+        # Latest-year students (graduating/new alumni) — use RF + score + predicted months
         if LATEST_YEAR and grad_year == LATEST_YEAR:
             high_s = score >= SCORE_THRESHOLD and rf_p >= 0.5
-            if employed:
-                # Employed graduating students: already placed, use score+RF
-                return _tier(high_s, True)
             fast_m = pred_months is not None and pred_months <= FAST_MONTHS
             return _tier(high_s, fast_m)
 
