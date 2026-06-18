@@ -162,6 +162,12 @@ def _run_import_and_training_background(app, db_path, file_path, safe_name,
                                    'forecast': forecast, 'import': import_result},
                         'error': None,
                     }
+                # Invalidate forecast cache so next page load rebuilds with new data
+                try:
+                    db.execute("DELETE FROM app_cache WHERE key='forecast'")
+                    db.commit()
+                except Exception:
+                    pass
             else:
                 _set_progress('done', 100, 'Import complete!')
                 with _training_lock:
@@ -170,6 +176,11 @@ def _run_import_and_training_background(app, db_path, file_path, safe_name,
                         'result': {'import': import_result},
                         'error': None,
                     }
+                try:
+                    db.execute("DELETE FROM app_cache WHERE key='forecast'")
+                    db.commit()
+                except Exception:
+                    pass
     except Exception as exc:
         _set_progress('error', 0, str(exc))
         with _training_lock:
