@@ -82,15 +82,12 @@ const STEPS_ADD = [
 
 const ACTIVE_STAGES = new Set(['uploading','importing','training','done','error'])
 
-// Re-renders only on stage change (3-4× per upload).
-// Text/percent update via DOM refs — zero React re-renders between stages.
-// Bar is a CSS shimmer animation (no JS width updates — cannot blink).
-function ProgressSection({ stage, steps, pctRef, msgRef }) {
+// Bar = pure CSS shimmer (cannot blink). Text comes from React state props — simple and reliable.
+function ProgressSection({ stage, pct, msg, steps }) {
   if (!stage || !ACTIVE_STAGES.has(stage)) return null
   const isDone = stage === 'done'
   const isError = stage === 'error'
   const isActive = !isDone && !isError
-
   return (
     <div className="mt-3 rounded-xl border border-gray-100 bg-white px-4 py-3">
       <div className="flex items-center gap-2.5 mb-3">
@@ -108,45 +105,36 @@ function ProgressSection({ stage, steps, pctRef, msgRef }) {
             <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
           </svg>
         )}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between">
-            <span ref={msgRef} className="text-xs font-semibold truncate"
-              style={{ color: isDone ? '#16a34a' : isError ? '#dc2626' : '#374151' }}>Processing…</span>
-            <span ref={pctRef} className="text-xs font-bold tabular-nums ml-2 flex-shrink-0"
-              style={{ color: isDone ? '#16a34a' : isError ? '#dc2626' : '#6b7280' }}>0%</span>
-          </div>
+        <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
+          <span className="text-xs font-semibold truncate"
+            style={{ color: isDone ? '#16a34a' : isError ? '#dc2626' : '#374151' }}>
+            {msg || 'Processing…'}
+          </span>
+          <span className="text-xs font-bold tabular-nums flex-shrink-0"
+            style={{ color: isDone ? '#16a34a' : isError ? '#dc2626' : '#6b7280' }}>
+            {pct}%
+          </span>
         </div>
       </div>
-
-      {/* Bar: CSS shimmer while active, solid when done/error — zero JS width updates */}
       <div className="w-full rounded-full h-1.5 overflow-hidden mb-3" style={{ background: '#e5e7eb' }}>
         {isActive && (
           <div style={{
             height: '100%', borderRadius: '9999px', width: '100%',
-            background: 'linear-gradient(90deg, #1a3d27 0%, #2d6a4f 35%, #52b788 50%, #2d6a4f 65%, #1a3d27 100%)',
-            backgroundSize: '200% 100%',
-            animation: 'upload-shimmer 1.8s linear infinite',
+            background: 'linear-gradient(90deg,#1a3d27 0%,#2d6a4f 35%,#52b788 50%,#2d6a4f 65%,#1a3d27 100%)',
+            backgroundSize: '200% 100%', animation: 'upload-shimmer 1.8s linear infinite',
           }} />
         )}
-        {isDone && (
-          <div style={{ height: '100%', borderRadius: '9999px', width: '100%', backgroundColor: '#16a34a' }} />
-        )}
-        {isError && (
-          <div style={{ height: '100%', borderRadius: '9999px', width: '60%', backgroundColor: '#dc2626' }} />
-        )}
+        {isDone && <div style={{ height:'100%', borderRadius:'9999px', width:'100%', backgroundColor:'#16a34a' }} />}
+        {isError && <div style={{ height:'100%', borderRadius:'9999px', width:'60%', backgroundColor:'#dc2626' }} />}
       </div>
-
-      {/* Step chips — purely stage-driven, no percent thresholds */}
       <div className="flex gap-1.5">
-        {steps.map((step) => {
+        {steps.map(step => {
           const stepDone = step.done(stage)
           const stepActive = !stepDone && step.active(stage)
           return (
             <div key={step.label} className="flex-1 py-1 rounded-md text-center text-[10px] font-semibold"
-              style={{
-                background: stepDone ? '#dcfce7' : stepActive ? '#fef3c7' : '#f3f4f6',
-                color:      stepDone ? '#16a34a' : stepActive ? '#d97706' : '#9ca3af',
-              }}>
+              style={{ background: stepDone ? '#dcfce7' : stepActive ? '#fef3c7' : '#f3f4f6',
+                       color: stepDone ? '#16a34a' : stepActive ? '#d97706' : '#9ca3af' }}>
               {stepDone ? '✓ ' : ''}{step.label}
             </div>
           )
@@ -164,18 +152,13 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
   const [progressStage, setProgressStage] = useState(null)
+  const [progressPct, setProgressPct] = useState(0)
+  const [progressMsg, setProgressMsg] = useState('')
   const progressPollRef = useRef(null)
   const lastStageRef = useRef(null)
-  const pctRef = useRef(null)
-  const msgRef = useRef(null)
 
   function stopPolling() {
     if (progressPollRef.current) { clearInterval(progressPollRef.current); progressPollRef.current = null }
-  }
-
-  function _updateText(percent, message) {
-    if (pctRef.current) pctRef.current.textContent = `${percent}%`
-    if (msgRef.current) msgRef.current.textContent = message || 'Processing…'
   }
 
   function startProgressPolling() {
@@ -184,8 +167,9 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
       try {
         const r = await api.get('/admin/upload/progress')
         const { stage, percent, message } = r.data
-        if (stage === 'idle') return  // server not started yet — skip everything
-        _updateText(percent, message)
+        if (stage === 'idle') return
+        setProgressPct(percent)
+        setProgressMsg(message)
         if (stage !== lastStageRef.current) {
           lastStageRef.current = stage
           setProgressStage(stage)
@@ -193,6 +177,7 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
         if (stage === 'done' || stage === 'error') {
           clearInterval(progressPollRef.current); progressPollRef.current = null
           if (stage === 'done') {
+            setDone(true)
             api.get('/admin/training/status').then(tr => {
               if (tr.data.status === 'done')
                 setResult(prev => ({ ...prev, forecast: tr.data.result?.forecast }))
@@ -213,8 +198,7 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
     setUploading(true)
     setError('')
     lastStageRef.current = 'uploading'
-    setProgressStage('uploading')
-    _updateText(0, 'Uploading file…')
+    setProgressStage('uploading'); setProgressPct(0); setProgressMsg('Uploading file…')
     try {
       const fd = new FormData()
       fd.append('file', file)
@@ -227,14 +211,13 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
       const data = res.data
       onUploaded(data.upload)
       setResult({ import: data.import || null, forecast: data.forecast || null })
-      setDone(true)
       onYearsRefresh()
       if (data.training_async) {
         startProgressPolling()
       } else {
+        setDone(true)
         lastStageRef.current = 'done'
-        setProgressStage('done')
-        _updateText(100, 'Complete!')
+        setProgressStage('done'); setProgressPct(100); setProgressMsg('Complete!')
         onStatusRefresh()
       }
     } catch (err) {
@@ -250,7 +233,7 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
     stopPolling()
     lastStageRef.current = null
     setFile(null); setDone(false); setConfirmed(false)
-    setResult(null); setError(''); setProgressStage(null)
+    setResult(null); setError(''); setProgressStage(null); setProgressPct(0); setProgressMsg('')
   }
 
   return (
@@ -282,7 +265,7 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
         </div>
       )}
 
-      <ProgressSection stage={progressStage} steps={STEPS_NEW} pctRef={pctRef} msgRef={msgRef} />
+      <ProgressSection stage={progressStage} pct={progressPct} msg={progressMsg} steps={STEPS_NEW} />
 
       {/* Import result */}
       {result?.import && (
@@ -374,18 +357,13 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
   const [progressStage, setProgressStage] = useState(null)
+  const [progressPct, setProgressPct] = useState(0)
+  const [progressMsg, setProgressMsg] = useState('')
   const progressPollRef = useRef(null)
   const lastStageRef = useRef(null)
-  const pctRef = useRef(null)
-  const msgRef = useRef(null)
 
   function stopPolling() {
     if (progressPollRef.current) { clearInterval(progressPollRef.current); progressPollRef.current = null }
-  }
-
-  function _updateText(percent, message) {
-    if (pctRef.current) pctRef.current.textContent = `${percent}%`
-    if (msgRef.current) msgRef.current.textContent = message || 'Processing…'
   }
 
   function startProgressPolling() {
@@ -394,8 +372,9 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
       try {
         const r = await api.get('/admin/upload/progress')
         const { stage, percent, message } = r.data
-        if (stage === 'idle') return  // server not started yet — skip everything
-        _updateText(percent, message)
+        if (stage === 'idle') return
+        setProgressPct(percent)
+        setProgressMsg(message)
         if (stage !== lastStageRef.current) {
           lastStageRef.current = stage
           setProgressStage(stage)
@@ -403,6 +382,7 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
         if (stage === 'done' || stage === 'error') {
           clearInterval(progressPollRef.current); progressPollRef.current = null
           if (stage === 'done') {
+            setDone(true)
             api.get('/admin/training/status').then(tr => {
               if (tr.data.status === 'done')
                 setResult(prev => ({ ...prev, training: { ...prev?.training, forecast: tr.data.result?.forecast, models: tr.data.result } }))
@@ -449,8 +429,7 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
     setUploading(true)
     setError('')
     lastStageRef.current = 'uploading'
-    setProgressStage('uploading')
-    _updateText(0, 'Uploading file…')
+    setProgressStage('uploading'); setProgressPct(0); setProgressMsg('Uploading file…')
     try {
       const fd = new FormData()
       fd.append('file', file)
@@ -469,7 +448,7 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
       } catch (err) {
         if (err.response?.status === 409 && err.response?.data?.year_conflict) {
           setConflict({ year: err.response.data.year, existing_count: err.response.data.existing_count })
-          setProgressStage(null)
+          setProgressStage(null); setProgressPct(0); setProgressMsg('')
           return
         }
         throw new Error(err.response?.data?.error || err.message || 'Upload failed')
@@ -478,15 +457,14 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
       setConflict(null)
 
       setResult({ training: data1, accounts: null })
-      setDone(true)
       if (applyToTraining) onYearsRefresh()
 
       if (data1.training_async) {
         startProgressPolling()
       } else {
+        setDone(true)
         lastStageRef.current = 'done'
-        setProgressStage('done')
-        _updateText(100, 'Complete!')
+        setProgressStage('done'); setProgressPct(100); setProgressMsg('Complete!')
         onStatusRefresh()
       }
     } catch (err) {
@@ -503,7 +481,7 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
     lastStageRef.current = null
     setFile(null); setModelName(''); setDone(false)
     setResult(null); setConflict(null); setError('')
-    setProgressStage(null)
+    setProgressStage(null); setProgressPct(0); setProgressMsg('')
     setCreateAccounts(true); setSkipEmail(false)
     setDatasetYear(nextAllowed ?? currentYear)
   }
@@ -635,7 +613,7 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
         </div>
       )}
 
-      <ProgressSection stage={progressStage} steps={STEPS_ADD} pctRef={pctRef} msgRef={msgRef} />
+      <ProgressSection stage={progressStage} pct={progressPct} msg={progressMsg} steps={STEPS_ADD} />
 
       {/* Results */}
       {result && (
