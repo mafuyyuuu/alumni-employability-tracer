@@ -1127,9 +1127,9 @@ def list_users():
 
     # Compute employability stats directly from DB (score formula, no ML needed)
     # Match _employability_level logic exactly:
-    # employed + months known: use _tier(score>=80, months<=4)
-    # employed + months NULL:  Likely if score>=80 else Employable
-    # unemployed:              Likely if score>=80 else Least
+    # employed + months known: use _tier(score>=75, months<=6)
+    # employed + months NULL:  Likely if score>=75 else Employable
+    # unemployed:              Likely if score>=75 else Least
     _s = "(avg_grade*0.35 + ojt_grade*0.20 + soft_skills*0.15 + hard_skills*0.15 + board_passer*15)"
     emp_counts = db.execute(f"""
         SELECT
@@ -2512,8 +2512,8 @@ def download_report():
         return round(min(norm * 0.35 + ojt * 0.20 + soft * 0.15 + hard * 0.15 + board * 15, 100), 1)
 
     def _tier(score, employed):
-        if score >= 80: return 'Likely Employable'
-        if score >= 65: return 'Employable'
+        if score >= 75: return 'Likely Employable'
+        if score >= 55: return 'Employable'
         return 'Least Employable'
 
     enriched = []
@@ -3209,14 +3209,19 @@ def upload_progress():
 
 # ── All-Models Forecasting ─────────────────────────────────────────────────
 
-_forecast_cache = {'result': None, 'horizon': None}
-
 @admin_bp.route('/forecasting/run-all', methods=['GET'])
 @admin_required
 def get_forecast_cache():
-    """Return cached forecast result instantly (no computation)."""
-    if _forecast_cache['result']:
-        return jsonify(_forecast_cache['result']), 200
+    """Return DB-persisted forecast cache instantly — survives server restarts."""
+    import json as _json
+    db = get_db()
+    try:
+        db.execute("CREATE TABLE IF NOT EXISTS app_cache (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT DEFAULT (datetime('now')))")
+        row = db.execute("SELECT value FROM app_cache WHERE key='forecast'").fetchone()
+        if row:
+            return jsonify(_json.loads(row['value'])), 200
+    except Exception:
+        pass
     return jsonify({'data': [], 'projections': {}, 'metrics': {}, 'cached': False}), 200
 
 @admin_bp.route('/forecasting/run-all', methods=['POST'])
@@ -3272,6 +3277,7 @@ def run_forecasting_all_models():
     chart_data = list(combined.values())
     chart_data.sort(key=lambda x: x['year'])
 
+    import json as _json
     result = {
         'data': chart_data,
         'historical': historical,
@@ -3280,8 +3286,13 @@ def run_forecasting_all_models():
         'horizon': horizon,
         'cached': True,
     }
-    _forecast_cache['result'] = result
-    _forecast_cache['horizon'] = horizon
+    try:
+        db2 = get_db()
+        db2.execute("CREATE TABLE IF NOT EXISTS app_cache (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT DEFAULT (datetime('now')))")
+        db2.execute("INSERT OR REPLACE INTO app_cache (key, value, updated_at) VALUES ('forecast', ?, datetime('now'))", [_json.dumps(result)])
+        db2.commit()
+    except Exception:
+        pass
     return jsonify(result), 200
 
 

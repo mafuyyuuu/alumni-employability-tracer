@@ -201,6 +201,12 @@ CREATE TABLE IF NOT EXISTS model_uploads (
     uploaded_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS app_cache (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS ncae_questions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     program TEXT NOT NULL,
