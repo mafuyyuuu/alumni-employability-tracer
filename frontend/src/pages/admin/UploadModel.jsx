@@ -69,10 +69,6 @@ function DropZone({ selectedFile, onFile, onClear, uploadDone, onUploadAnother, 
 }
 
 // ── Tab 0: Upload New Dataset (bulk overwrite) ───────────────────────────────
-// Bar width per stage — CSS transition animates between them (only 3 changes per upload)
-const STAGE_WIDTH = { uploading: 8, importing: 55, training: 88, done: 100, error: 100 }
-
-// Steps are purely stage-based — no percent thresholds, no mid-upload re-renders
 const STEPS_NEW = [
   { label: 'Upload',        done: s => ['importing','training','done'].includes(s), active: s => s === 'uploading' },
   { label: 'Replace data',  done: s => ['training','done'].includes(s),             active: s => s === 'importing' },
@@ -84,45 +80,74 @@ const STEPS_ADD = [
   { label: 'Train models', done: s => s === 'done',                                active: s => s === 'training'  },
 ]
 
-// ProgressSection re-renders ONLY on stage change (3×/upload).
-// Percent text and message update via DOM refs — zero React re-renders between stages.
+const ACTIVE_STAGES = new Set(['uploading','importing','training','done','error'])
+
+// Re-renders only on stage change (3-4× per upload).
+// Text/percent update via DOM refs — zero React re-renders between stages.
+// Bar is a CSS shimmer animation (no JS width updates — cannot blink).
 function ProgressSection({ stage, steps, pctRef, msgRef }) {
-  if (!stage || stage === 'idle') return null
+  if (!stage || !ACTIVE_STAGES.has(stage)) return null
   const isDone = stage === 'done'
   const isError = stage === 'error'
+  const isActive = !isDone && !isError
+
   return (
     <div className="mt-3 rounded-xl border border-gray-100 bg-white px-4 py-3">
-      <div className="flex items-center justify-between mb-2">
-        <span ref={msgRef} className="text-xs font-semibold text-gray-600">Processing…</span>
-        <span ref={pctRef} className="text-xs font-bold tabular-nums"
-          style={{ color: isDone ? '#16a34a' : isError ? '#dc2626' : '#374151' }}>0%</span>
+      <div className="flex items-center gap-2.5 mb-3">
+        {isDone ? (
+          <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: '#dcfce7' }}>
+            <span style={{ color: '#16a34a', fontSize: 11, fontWeight: 900 }}>✓</span>
+          </div>
+        ) : isError ? (
+          <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: '#fee2e2' }}>
+            <span style={{ color: '#dc2626', fontSize: 11, fontWeight: 900 }}>✕</span>
+          </div>
+        ) : (
+          <svg className="w-4 h-4 flex-shrink-0 animate-spin" fill="none" viewBox="0 0 24 24" style={{ color: '#0f2d1a' }}>
+            <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+            <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+          </svg>
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between">
+            <span ref={msgRef} className="text-xs font-semibold truncate"
+              style={{ color: isDone ? '#16a34a' : isError ? '#dc2626' : '#374151' }}>Processing…</span>
+            <span ref={pctRef} className="text-xs font-bold tabular-nums ml-2 flex-shrink-0"
+              style={{ color: isDone ? '#16a34a' : isError ? '#dc2626' : '#6b7280' }}>0%</span>
+          </div>
+        </div>
       </div>
-      <div className="w-full rounded-full h-2 overflow-hidden" style={{ background: '#e5e7eb' }}>
-        <div style={{
-          height: '100%', borderRadius: '9999px',
-          width: `${STAGE_WIDTH[stage] ?? 0}%`,
-          backgroundColor: isDone ? '#16a34a' : isError ? '#dc2626' : '#0f2d1a',
-          transition: 'width 1.4s ease-in-out, background-color 0.5s',
-        }} />
+
+      {/* Bar: CSS shimmer while active, solid when done/error — zero JS width updates */}
+      <div className="w-full rounded-full h-1.5 overflow-hidden mb-3" style={{ background: '#e5e7eb' }}>
+        {isActive && (
+          <div style={{
+            height: '100%', borderRadius: '9999px', width: '100%',
+            background: 'linear-gradient(90deg, #1a3d27 0%, #2d6a4f 35%, #52b788 50%, #2d6a4f 65%, #1a3d27 100%)',
+            backgroundSize: '200% 100%',
+            animation: 'upload-shimmer 1.8s linear infinite',
+          }} />
+        )}
+        {isDone && (
+          <div style={{ height: '100%', borderRadius: '9999px', width: '100%', backgroundColor: '#16a34a' }} />
+        )}
+        {isError && (
+          <div style={{ height: '100%', borderRadius: '9999px', width: '60%', backgroundColor: '#dc2626' }} />
+        )}
       </div>
-      <div className="flex items-center mt-3 gap-1">
-        {steps.map((step, i) => {
+
+      {/* Step chips — purely stage-driven, no percent thresholds */}
+      <div className="flex gap-1.5">
+        {steps.map((step) => {
           const stepDone = step.done(stage)
           const stepActive = !stepDone && step.active(stage)
           return (
-            <div key={step.label} className="flex items-center" style={{ flex: i < steps.length - 1 ? '1' : 'none' }}>
-              <div className="flex flex-col items-center flex-shrink-0">
-                <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black"
-                  style={{ background: stepDone ? '#16a34a' : stepActive ? '#f59e0b' : '#e5e7eb', color: stepDone || stepActive ? '#fff' : '#9ca3af' }}>
-                  {stepDone ? '✓' : i + 1}
-                </div>
-                <span className="text-[9px] font-semibold mt-0.5 whitespace-nowrap"
-                  style={{ color: stepDone ? '#16a34a' : stepActive ? '#d97706' : '#9ca3af' }}>{step.label}</span>
-              </div>
-              {i < steps.length - 1 && (
-                <div className="flex-1 h-px mx-1 mb-3.5"
-                  style={{ background: stepDone ? '#86efac' : '#e5e7eb', transition: 'background 0.4s' }} />
-              )}
+            <div key={step.label} className="flex-1 py-1 rounded-md text-center text-[10px] font-semibold"
+              style={{
+                background: stepDone ? '#dcfce7' : stepActive ? '#fef3c7' : '#f3f4f6',
+                color:      stepDone ? '#16a34a' : stepActive ? '#d97706' : '#9ca3af',
+              }}>
+              {stepDone ? '✓ ' : ''}{step.label}
             </div>
           )
         })}
@@ -160,7 +185,8 @@ function TabUploadNew({ onUploaded, onStatusRefresh, onYearsRefresh }) {
         const r = await api.get('/admin/upload/progress')
         const { stage, percent, message } = r.data
         _updateText(percent, message)
-        if (stage !== lastStageRef.current) {
+        // Ignore 'idle' — it means the server hasn't started yet; don't unmount the bar
+        if (stage !== 'idle' && stage !== lastStageRef.current) {
           lastStageRef.current = stage
           setProgressStage(stage)
         }
@@ -369,7 +395,8 @@ function TabAddData({ onUploaded, onStatusRefresh, onYearsRefresh }) {
         const r = await api.get('/admin/upload/progress')
         const { stage, percent, message } = r.data
         _updateText(percent, message)
-        if (stage !== lastStageRef.current) {
+        // Ignore 'idle' — it means the server hasn't started yet; don't unmount the bar
+        if (stage !== 'idle' && stage !== lastStageRef.current) {
           lastStageRef.current = stage
           setProgressStage(stage)
         }
