@@ -3612,6 +3612,47 @@ def delete_training_data_by_year(year):
         [year]
     )
     db.commit()
+
+    # Auto-refresh forecast cache in background so page shows updated data after deletion
+    _app = current_app._get_current_object()
+    import threading, json as _json
+    def _refresh_forecast(app=_app):
+        try:
+            with app.app_context():
+                _db = get_db()
+                _ensure_employment_data_from_training(_db)
+                emp_rows = _db.execute(
+                    "SELECT year, overall_rate FROM employment_data ORDER BY year"
+                ).fetchall()
+                if not emp_rows:
+                    return
+                rates = [r['overall_rate'] for r in emp_rows]
+                years = [r['year'] for r in emp_rows]
+                combined = {str(r['year']): {'year': str(r['year']), 'rate': r['overall_rate']} for r in emp_rows}
+                projections, metrics_all = {}, {}
+                horizon = 3
+                for key, model_str in [('rf','Random Forest'),('arima','Auto ARIMA (AIC search)'),('lr','Linear Regression')]:
+                    try:
+                        result = _forecast_result_for_model(rates, horizon=horizon, model_str=model_str)
+                        fv = result.get('forecast_values', [])
+                        for i, val in enumerate(fv):
+                            yr = str(max(years) + i + 1)
+                            if yr not in combined:
+                                combined[yr] = {'year': yr, 'forecast': True}
+                            combined[yr][key] = val
+                        projections[key] = [{'year': str(max(years)+i+1), 'val': f"{v}%"} for i, v in enumerate(fv)]
+                        metrics_all[key] = result.get('metrics', {})
+                    except Exception:
+                        pass
+                chart_data = sorted(combined.values(), key=lambda x: x['year'])
+                payload = {'data': list(chart_data), 'projections': projections, 'metrics': metrics_all, 'horizon': horizon, 'cached': True}
+                _db.execute("INSERT OR REPLACE INTO app_cache (key, value, updated_at) VALUES ('forecast',?,datetime('now'))",
+                            [_json.dumps(payload)])
+                _db.commit()
+        except Exception:
+            pass
+    threading.Thread(target=_refresh_forecast, daemon=True).start()
+
     return jsonify({
         'message': f'Deleted {cur.rowcount} training rows and {alumni_cur.rowcount} alumni accounts for {year}.',
         'deleted': cur.rowcount,
