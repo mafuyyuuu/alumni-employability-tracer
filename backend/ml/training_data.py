@@ -5,7 +5,6 @@ from typing import Tuple, Optional
 import pandas as pd
 
 NUMERIC_FEATURES = [
-    'graduation_year',
     'avg_grade',
     'avg_prof_grade',
     'avg_elec_grade',
